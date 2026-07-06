@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>笔记测试</title>
+    <style>
+      body {
+        margin: 32px;
+        font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+        color: #1f2933;
+      }
+
+      pre {
+        padding: 16px;
+        border: 1px solid #d8dee6;
+        border-radius: 8px;
+        background: #f8fafc;
+        white-space: pre-wrap;
+      }
+
+      .pass {
+        color: #167447;
+      }
+
+      .fail {
+        color: #c2413a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>笔记应用测试</h1>
+    <pre id="results">运行中...</pre>
+
+    <script>
+      window.__notesAppTestMode = true;
+    </script>
+    <script src="app.js"></script>
+    <script>
+      const results = document.getElementById("results");
+
+      function createMemoryStorage() {
+        const data = new Map();
+        return {
+          getItem(key) {
+            return data.has(key) ? data.get(key) : null;
+          },
+          setItem(key, value) {
+            data.set(key, String(value));
+          },
+          removeItem(key) {
+            data.delete(key);
+          }
+        };
+      }
+
+      function assert(condition, message) {
+        if (!condition) {
+          throw new Error(message);
+        }
+      }
+
+      const tests = [
+        {
+          name: "新建笔记后会自动选中",
+          run() {
+            const store = NotesApp.createStore(createMemoryStorage());
+            const note = store.addNote();
+            assert(store.getNotes().length === 1, "应该有 1 条笔记");
+            assert(store.getSelectedId() === note.id, "新笔记应该被选中");
+          }
+        },
+        {
+          name: "修改标题和内容会持久化",
+          run() {
+            const storage = createMemoryStorage();
+            const store = NotesApp.createStore(storage);
+            store.addNote();
+            store.updateSelected({ title: "会议记录", content: "确认发布时间" });
+
+            const reloaded = NotesApp.createStore(storage);
+            const note = reloaded.getSelectedNote();
+            assert(note.title === "会议记录", "标题应该保存");
+            assert(note.content === "确认发布时间", "内容应该保存");
+          }
+        },
+        {
+          name: "删除当前笔记会选中剩余笔记",
+          run() {
+            const store = NotesApp.createStore(createMemoryStorage());
+            const first = store.addNote();
+            const second = store.addNote();
+            assert(store.getSelectedId() === second.id, "第二条应被选中");
+            store.deleteSelected();
+            assert(store.getNotes().length === 1, "删除后应该剩 1 条");
+            assert(store.getSelectedId() === first.id, "应该选中剩余笔记");
+          }
+        },
+        {
+          name: "空标题和空内容有友好占位",
+          run() {
+            assert(NotesApp.getDisplayTitle("   ") === "未命名笔记", "空标题占位错误");
+            assert(NotesApp.getPreview("\n\t") === "暂无内容", "空内容占位错误");
+          }
+        }
+      ];
+
+      const lines = [];
+      let passed = 0;
+
+      for (const test of tests) {
+        try {
+          test.run();
+          passed += 1;
+          lines.push("PASS " + test.name);
+        } catch (error) {
+          lines.push("FAIL " + test.name + "\n  " + error.message);
+        }
+      }
+
+      results.className = passed === tests.length ? "pass" : "fail";
+      results.textContent = lines.join("\n") + "\n\n" + passed + " / " + tests.length + " 通过";
+    </script>
+  </body>
+</html>
