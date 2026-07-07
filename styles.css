@@ -2,14 +2,36 @@
   color-scheme: light;
   --bg: #f4f6f8;
   --panel: #ffffff;
+  --sidebar-bg: #f8fafc;
   --text: #1f2933;
   --muted: #667085;
   --line: #d8dee6;
   --accent: #2f6fed;
   --accent-strong: #1f55c5;
+  --active-bg: #eaf1ff;
+  --hover-bg: #eef3f8;
   --danger: #c2413a;
   --danger-bg: #fff0ef;
   --shadow: 0 18px 45px rgba(31, 41, 51, 0.12);
+  --toggle-shadow: 0 14px 34px rgba(31, 41, 51, 0.2);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111827;
+  --panel: #182230;
+  --sidebar-bg: #121c2a;
+  --text: #eef4ff;
+  --muted: #a9b7ca;
+  --line: #2f3b4d;
+  --accent: #65a7ff;
+  --accent-strong: #8fbeff;
+  --active-bg: #203a5f;
+  --hover-bg: #1d2b3d;
+  --danger: #ff9b94;
+  --danger-bg: #3a2022;
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
+  --toggle-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
 }
 
 * {
@@ -45,7 +67,7 @@ button {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   border-right: 1px solid var(--line);
-  background: #f8fafc;
+  background: var(--sidebar-bg);
   min-width: 0;
 }
 
@@ -130,12 +152,12 @@ button {
 }
 
 .note-item:hover {
-  background: #eef3f8;
+  background: var(--hover-bg);
 }
 
 .note-item.active {
   border-color: rgba(47, 111, 237, 0.38);
-  background: #eaf1ff;
+  background: var(--active-bg);
 }
 
 .note-title {
@@ -193,6 +215,37 @@ button {
 .text-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.theme-toggle {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: calc(100vw - 36px);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--toggle-shadow);
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.theme-toggle-icon {
+  width: 18px;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
 }
 
 .editor-fields {
@@ -274,5 +327,10 @@ button {
 
   .editor-toolbar {
     min-height: 58px;
+  }
+
+  .theme-toggle {
+    left: 12px;
+    bottom: 12px;
   }
 }

@@ -3,6 +3,21 @@
 
   const STORAGE_KEY = "html-notes-app.notes";
   const SELECTED_KEY = "html-notes-app.selected";
+  const THEME_KEY = "html-notes-app.theme";
+  const THEMES = {
+    light: {
+      value: "light",
+      label: "深色",
+      ariaLabel: "切换为深色模式",
+      title: "切换为深色模式"
+    },
+    dark: {
+      value: "dark",
+      label: "浅色",
+      ariaLabel: "切换为浅色模式",
+      title: "切换为浅色模式"
+    }
+  };
 
   const createId = () => {
     if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -74,6 +89,27 @@
       hour: "2-digit",
       minute: "2-digit"
     }).format(date);
+  }
+
+  function getSystemTheme() {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  }
+
+  function getInitialTheme(storage) {
+    const savedTheme = storage.getItem(THEME_KEY);
+    if (savedTheme === "dark" || savedTheme === "light") {
+      return savedTheme;
+    }
+    return getSystemTheme();
+  }
+
+  function applyTheme(documentRef, theme) {
+    const nextTheme = theme === "dark" ? "dark" : "light";
+    documentRef.documentElement.dataset.theme = nextTheme;
+    return nextTheme;
   }
 
   function createStore(storage) {
@@ -153,6 +189,8 @@
       noteList: documentRef.getElementById("noteList"),
       noteCount: documentRef.getElementById("noteCount"),
       saveStatus: documentRef.getElementById("saveStatus"),
+      themeToggle: documentRef.getElementById("themeToggle"),
+      themeToggleText: documentRef.getElementById("themeToggleText"),
       titleInput: documentRef.getElementById("titleInput"),
       contentInput: documentRef.getElementById("contentInput"),
       editorFields: documentRef.getElementById("editorFields"),
@@ -160,6 +198,7 @@
     };
 
     const store = createStore(storage);
+    let currentTheme = applyTheme(documentRef, getInitialTheme(storage));
     let saveTimer = 0;
 
     function setSaveStatus(text) {
@@ -242,6 +281,19 @@
       renderEditor();
     }
 
+    function renderThemeToggle() {
+      const theme = THEMES[currentTheme];
+      elements.themeToggleText.textContent = theme.label;
+      elements.themeToggle.setAttribute("aria-label", theme.ariaLabel);
+      elements.themeToggle.title = theme.title;
+    }
+
+    function toggleTheme() {
+      currentTheme = applyTheme(documentRef, currentTheme === "dark" ? "light" : "dark");
+      storage.setItem(THEME_KEY, currentTheme);
+      renderThemeToggle();
+    }
+
     function addNote() {
       store.addNote();
       elements.searchInput.value = "";
@@ -253,6 +305,7 @@
 
     elements.newNoteButton.addEventListener("click", addNote);
     elements.emptyNewNoteButton.addEventListener("click", addNote);
+    elements.themeToggle.addEventListener("click", toggleTheme);
 
     elements.noteList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-note-id]");
@@ -295,16 +348,20 @@
     }
 
     render();
+    renderThemeToggle();
     return { store, render };
   }
 
   window.NotesApp = {
     STORAGE_KEY,
     SELECTED_KEY,
+    THEME_KEY,
     createNote,
     createStore,
     getPreview,
     getDisplayTitle,
+    getInitialTheme,
+    applyTheme,
     initApp
   };
 
