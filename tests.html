@@ -138,6 +138,12 @@
           }
         },
         {
+          name: "侧栏折叠偏好有固定存储键",
+          run() {
+            assert(NotesApp.SIDEBAR_KEY === "html-notes-app.sidebar", "侧栏偏好存储键应该稳定");
+          }
+        },
+        {
           name: "手写内容会持久化",
           run() {
             const storage = createMemoryStorage();

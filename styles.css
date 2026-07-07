@@ -67,6 +67,14 @@ button {
   background: var(--panel);
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+
 .sidebar {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -270,7 +278,6 @@ button {
   opacity: 0.45;
 }
 
-.pen-control,
 .pen-size-control {
   display: inline-flex;
   align-items: center;
@@ -280,17 +287,47 @@ button {
   background: var(--panel);
 }
 
-.pen-control {
-  width: 42px;
-  justify-content: center;
+.color-picker {
+  position: relative;
 }
 
-.pen-control input {
+.color-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.color-swatch,
+.color-option {
   width: 24px;
   height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--color, #1f2933);
+}
+
+.color-palette {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 12;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.color-option {
   padding: 0;
-  border: 0;
-  background: transparent;
+  cursor: pointer;
 }
 
 .pen-size-control {
@@ -305,6 +342,14 @@ button {
 .text-button.active {
   border-color: var(--accent);
   background: var(--active-bg);
+}
+
+.handwriting-canvas.lasso-active {
+  cursor: copy;
+}
+
+.handwriting-canvas.selection-active {
+  cursor: move;
 }
 
 .theme-toggle {
@@ -458,6 +503,10 @@ button {
   .app-shell {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(230px, 42vh) minmax(0, 1fr);
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .sidebar {

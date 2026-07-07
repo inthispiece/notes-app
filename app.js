@@ -4,11 +4,21 @@
   const STORAGE_KEY = "html-notes-app.notes";
   const SELECTED_KEY = "html-notes-app.selected";
   const THEME_KEY = "html-notes-app.theme";
+  const SIDEBAR_KEY = "html-notes-app.sidebar";
   const APP_NAME = "lrc神金笔记";
   const APP_LOGO_SRC = "assets/logo-bird.png";
   const NOTE_TYPES = {
     text: "text",
     handwriting: "handwriting"
+  };
+  const DRAWING_TOOLS = {
+    pen: "pen",
+    eraser: "eraser",
+    lasso: "lasso"
+  };
+  const PEN_TYPES = {
+    ballpoint: "ballpoint",
+    fountain: "fountain"
   };
   const THEMES = {
     light: {
@@ -148,6 +158,10 @@
     return nextTheme;
   }
 
+  function getInitialSidebarCollapsed(storage) {
+    return storage.getItem(SIDEBAR_KEY) === "collapsed";
+  }
+
   function createStore(storage) {
     let notes = loadNotes(storage);
     let selectedId = storage.getItem(SELECTED_KEY);
@@ -218,9 +232,11 @@
 
   function initApp(documentRef, storage) {
     const elements = {
+      appShell: documentRef.querySelector(".app-shell"),
       newNoteButton: documentRef.getElementById("newNoteButton"),
       emptyNewNoteButton: documentRef.getElementById("emptyNewNoteButton"),
       deleteNoteButton: documentRef.getElementById("deleteNoteButton"),
+      toggleSidebarButton: documentRef.getElementById("toggleSidebarButton"),
       searchInput: documentRef.getElementById("searchInput"),
       noteList: documentRef.getElementById("noteList"),
       noteCount: documentRef.getElementById("noteCount"),
@@ -236,9 +252,16 @@
       nextPageButton: documentRef.getElementById("nextPageButton"),
       addPageButton: documentRef.getElementById("addPageButton"),
       pageIndicatorButton: documentRef.getElementById("pageIndicatorButton"),
-      penColorInput: documentRef.getElementById("penColorInput"),
+      colorMenuButton: documentRef.getElementById("colorMenuButton"),
+      colorSwatch: documentRef.getElementById("colorSwatch"),
+      colorPalette: documentRef.getElementById("colorPalette"),
+      colorOptions: Array.from(documentRef.querySelectorAll("[data-color]")),
       penSizeInput: documentRef.getElementById("penSizeInput"),
+      ballpointButton: documentRef.getElementById("ballpointButton"),
+      fountainPenButton: documentRef.getElementById("fountainPenButton"),
       eraserButton: documentRef.getElementById("eraserButton"),
+      lassoButton: documentRef.getElementById("lassoButton"),
+      clearSelectionButton: documentRef.getElementById("clearSelectionButton"),
       handwritingControls: Array.from(documentRef.querySelectorAll(".handwriting-control")),
       editorFields: documentRef.getElementById("editorFields"),
       emptyState: documentRef.getElementById("emptyState"),
@@ -253,11 +276,19 @@
 
     const store = createStore(storage);
     let currentTheme = applyTheme(documentRef, getInitialTheme(storage));
+    let sidebarCollapsed = getInitialSidebarCollapsed(storage);
     let currentPageIndex = 0;
     let saveTimer = 0;
     let isDrawing = false;
     let lastPoint = null;
-    let isEraser = false;
+    let currentTool = DRAWING_TOOLS.pen;
+    let currentPenType = PEN_TYPES.ballpoint;
+    let currentColor = currentTheme === "dark" ? "#eef4ff" : "#1f2933";
+    let lassoPoints = [];
+    let lassoBaseImage = null;
+    let selection = null;
+    let isDraggingSelection = false;
+    let selectionDragOffset = { x: 0, y: 0 };
     const handwritingContext = elements.handwritingCanvas.getContext
       ? elements.handwritingCanvas.getContext("2d")
       : null;
@@ -367,6 +398,19 @@
       elements.themeToggle.title = theme.title;
     }
 
+    function renderSidebar() {
+      elements.appShell.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+      elements.toggleSidebarButton.textContent = sidebarCollapsed ? "显示侧栏" : "隐藏侧栏";
+      elements.toggleSidebarButton.setAttribute("aria-pressed", String(sidebarCollapsed));
+    }
+
+    function toggleSidebar() {
+      sidebarCollapsed = !sidebarCollapsed;
+      storage.setItem(SIDEBAR_KEY, sidebarCollapsed ? "collapsed" : "expanded");
+      renderSidebar();
+      window.setTimeout(() => renderHandwriting(getHandwritingPages(store.getSelectedNote())[currentPageIndex] || ""), 0);
+    }
+
     function toggleTheme() {
       currentTheme = applyTheme(documentRef, currentTheme === "dark" ? "light" : "dark");
       storage.setItem(THEME_KEY, currentTheme);
@@ -401,15 +445,33 @@
       return Number.isFinite(size) ? Math.max(1, Math.min(18, size)) : 4;
     }
 
+    function getPressure(event) {
+      if (typeof event.pressure === "number" && event.pressure > 0) {
+        return event.pressure;
+      }
+      return 0.5;
+    }
+
+    function getStrokeSize(event) {
+      const baseSize = getPenSize();
+      if (currentTool === DRAWING_TOOLS.eraser) {
+        return baseSize * 2.2;
+      }
+      if (currentPenType === PEN_TYPES.fountain) {
+        return Math.max(1, baseSize * (0.35 + getPressure(event) * 1.65));
+      }
+      return baseSize;
+    }
+
     function applyDrawingStyle() {
       if (!handwritingContext) {
         return;
       }
-      handwritingContext.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
+      handwritingContext.globalCompositeOperation = currentTool === DRAWING_TOOLS.eraser ? "destination-out" : "source-over";
       handwritingContext.lineCap = "round";
       handwritingContext.lineJoin = "round";
-      handwritingContext.lineWidth = isEraser ? getPenSize() * 2.2 : getPenSize();
-      handwritingContext.strokeStyle = isEraser ? "rgba(0, 0, 0, 1)" : elements.penColorInput.value;
+      handwritingContext.lineWidth = getStrokeSize({});
+      handwritingContext.strokeStyle = currentTool === DRAWING_TOOLS.eraser ? "rgba(0, 0, 0, 1)" : currentColor;
       handwritingContext.fillStyle = handwritingContext.strokeStyle;
     }
 
@@ -470,7 +532,172 @@
       };
     }
 
-    function drawPoint(point) {
+    function getCanvasCssSize() {
+      const canvas = elements.handwritingCanvas;
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+      return {
+        width: Math.max(1, Math.round(rect?.width || canvas.width || 900)),
+        height: Math.max(1, Math.round(rect?.height || canvas.height || 560))
+      };
+    }
+
+    function getCanvasImageData() {
+      if (!handwritingContext?.getImageData) {
+        return null;
+      }
+      const canvas = elements.handwritingCanvas;
+      return handwritingContext.getImageData(0, 0, canvas.width, canvas.height);
+    }
+
+    function putCanvasImageData(imageData) {
+      if (imageData && handwritingContext?.putImageData) {
+        handwritingContext.putImageData(imageData, 0, 0);
+        applyDrawingStyle();
+      }
+    }
+
+    function drawLassoPath() {
+      putCanvasImageData(lassoBaseImage);
+      if (lassoPoints.length < 2 || !handwritingContext) {
+        return;
+      }
+      const previousOperation = handwritingContext.globalCompositeOperation;
+      const previousStroke = handwritingContext.strokeStyle;
+      const previousWidth = handwritingContext.lineWidth;
+      handwritingContext.globalCompositeOperation = "source-over";
+      handwritingContext.strokeStyle = "#2f6fed";
+      handwritingContext.lineWidth = 1.5;
+      handwritingContext.beginPath();
+      handwritingContext.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+      lassoPoints.slice(1).forEach((point) => handwritingContext.lineTo(point.x, point.y));
+      handwritingContext.stroke();
+      handwritingContext.globalCompositeOperation = previousOperation;
+      handwritingContext.strokeStyle = previousStroke;
+      handwritingContext.lineWidth = previousWidth;
+    }
+
+    function getLassoBounds(points) {
+      const xs = points.map((point) => point.x);
+      const ys = points.map((point) => point.y);
+      const minX = Math.max(0, Math.floor(Math.min(...xs)));
+      const minY = Math.max(0, Math.floor(Math.min(...ys)));
+      const maxX = Math.ceil(Math.max(...xs));
+      const maxY = Math.ceil(Math.max(...ys));
+      return {
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY)
+      };
+    }
+
+    function traceLassoPath(context, points, offsetX = 0, offsetY = 0) {
+      context.beginPath();
+      context.moveTo(points[0].x - offsetX, points[0].y - offsetY);
+      points.slice(1).forEach((point) => context.lineTo(point.x - offsetX, point.y - offsetY));
+      context.closePath();
+    }
+
+    function extractSelection() {
+      if (lassoPoints.length < 3 || !handwritingContext?.clip || !handwritingContext?.save) {
+        lassoPoints = [];
+        putCanvasImageData(lassoBaseImage);
+        return;
+      }
+      putCanvasImageData(lassoBaseImage);
+      const bounds = getLassoBounds(lassoPoints);
+      const size = getCanvasCssSize();
+      const selectionCanvas = documentRef.createElement("canvas");
+      selectionCanvas.width = bounds.width;
+      selectionCanvas.height = bounds.height;
+      const selectionContext = selectionCanvas.getContext("2d");
+      if (!selectionContext) {
+        lassoPoints = [];
+        return;
+      }
+      traceLassoPath(selectionContext, lassoPoints, bounds.x, bounds.y);
+      selectionContext.clip();
+      selectionContext.drawImage(
+        elements.handwritingCanvas,
+        0,
+        0,
+        elements.handwritingCanvas.width,
+        elements.handwritingCanvas.height,
+        -bounds.x,
+        -bounds.y,
+        size.width,
+        size.height
+      );
+
+      handwritingContext.save();
+      traceLassoPath(handwritingContext, lassoPoints);
+      handwritingContext.clip();
+      handwritingContext.clearRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      handwritingContext.restore();
+      selection = {
+        image: selectionCanvas,
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        baseImage: getCanvasImageData()
+      };
+      lassoPoints = [];
+      drawSelection();
+      saveHandwriting();
+    }
+
+    function drawSelection() {
+      if (!selection || !handwritingContext) {
+        return;
+      }
+      putCanvasImageData(selection.baseImage);
+      const previousOperation = handwritingContext.globalCompositeOperation;
+      const previousStroke = handwritingContext.strokeStyle;
+      const previousWidth = handwritingContext.lineWidth;
+      handwritingContext.globalCompositeOperation = "source-over";
+      handwritingContext.drawImage(selection.image, selection.x, selection.y, selection.width, selection.height);
+      handwritingContext.strokeStyle = "#2f6fed";
+      handwritingContext.lineWidth = 1.5;
+      handwritingContext.strokeRect?.(selection.x, selection.y, selection.width, selection.height);
+      handwritingContext.globalCompositeOperation = previousOperation;
+      handwritingContext.strokeStyle = previousStroke;
+      handwritingContext.lineWidth = previousWidth;
+    }
+
+    function isPointInSelection(point) {
+      return (
+        selection &&
+        point.x >= selection.x &&
+        point.x <= selection.x + selection.width &&
+        point.y >= selection.y &&
+        point.y <= selection.y + selection.height
+      );
+    }
+
+    function commitSelection() {
+      if (!selection) {
+        return false;
+      }
+      drawSelection();
+      selection = null;
+      saveHandwriting();
+      renderToolState();
+      return true;
+    }
+
+    function clearSelection() {
+      if (!selection) {
+        return;
+      }
+      putCanvasImageData(selection.baseImage);
+      selection = null;
+      saveHandwriting();
+      renderToolState();
+    }
+
+    function drawPoint(point, event) {
+      handwritingContext.lineWidth = getStrokeSize(event || {});
       handwritingContext.beginPath();
       handwritingContext.arc(point.x, point.y, handwritingContext.lineWidth / 2, 0, Math.PI * 2);
       handwritingContext.fill();
@@ -502,18 +729,50 @@
       }
       event.preventDefault();
       resizeCanvas();
+      const point = getCanvasPoint(event);
+      if (currentTool === DRAWING_TOOLS.lasso) {
+        if (isPointInSelection(point)) {
+          isDraggingSelection = true;
+          selectionDragOffset = {
+            x: point.x - selection.x,
+            y: point.y - selection.y
+          };
+        } else {
+          commitSelection();
+          lassoBaseImage = getCanvasImageData();
+          lassoPoints = [point];
+          isDrawing = true;
+        }
+        elements.handwritingCanvas.setPointerCapture?.(event.pointerId);
+        return;
+      }
       isDrawing = true;
-      lastPoint = getCanvasPoint(event);
-      drawPoint(lastPoint);
+      lastPoint = point;
+      drawPoint(lastPoint, event);
       elements.handwritingCanvas.setPointerCapture?.(event.pointerId);
     }
 
     function draw(event) {
-      if (!isDrawing || !lastPoint || !handwritingContext) {
+      if (!handwritingContext) {
         return;
       }
       event.preventDefault();
       const point = getCanvasPoint(event);
+      if (currentTool === DRAWING_TOOLS.lasso && isDraggingSelection && selection) {
+        selection.x = point.x - selectionDragOffset.x;
+        selection.y = point.y - selectionDragOffset.y;
+        drawSelection();
+        return;
+      }
+      if (currentTool === DRAWING_TOOLS.lasso && isDrawing) {
+        lassoPoints.push(point);
+        drawLassoPath();
+        return;
+      }
+      if (!isDrawing || !lastPoint) {
+        return;
+      }
+      handwritingContext.lineWidth = getStrokeSize(event);
       handwritingContext.beginPath();
       handwritingContext.moveTo(lastPoint.x, lastPoint.y);
       handwritingContext.lineTo(point.x, point.y);
@@ -522,10 +781,26 @@
     }
 
     function stopDrawing(event) {
-      if (!isDrawing) {
+      if (!isDrawing && !isDraggingSelection) {
         return;
       }
       event.preventDefault();
+      if (currentTool === DRAWING_TOOLS.lasso && isDraggingSelection) {
+        isDraggingSelection = false;
+        drawSelection();
+        selection = null;
+        saveHandwriting();
+        renderToolState();
+        elements.handwritingCanvas.releasePointerCapture?.(event.pointerId);
+        return;
+      }
+      if (currentTool === DRAWING_TOOLS.lasso) {
+        isDrawing = false;
+        extractSelection();
+        renderToolState();
+        elements.handwritingCanvas.releasePointerCapture?.(event.pointerId);
+        return;
+      }
       isDrawing = false;
       lastPoint = null;
       elements.handwritingCanvas.releasePointerCapture?.(event.pointerId);
@@ -553,6 +828,7 @@
     }
 
     function updateCurrentPage(pageIndex) {
+      commitSelection();
       const selected = store.getSelectedNote();
       if (!selected || selected.type !== NOTE_TYPES.handwriting) {
         return;
@@ -581,6 +857,7 @@
     }
 
     function addHandwritingPage() {
+      commitSelection();
       const selected = store.getSelectedNote();
       if (!selected || selected.type !== NOTE_TYPES.handwriting) {
         return;
@@ -596,10 +873,43 @@
       scheduleSavedStatus();
     }
 
-    function renderEraserState() {
-      elements.eraserButton.classList.toggle("active", isEraser);
-      elements.eraserButton.setAttribute("aria-pressed", String(isEraser));
-      elements.handwritingCanvas.style.cursor = isEraser ? "cell" : "crosshair";
+    function setTool(tool) {
+      if (currentTool === DRAWING_TOOLS.lasso && tool !== DRAWING_TOOLS.lasso) {
+        commitSelection();
+      }
+      currentTool = currentTool === tool ? DRAWING_TOOLS.pen : tool;
+      renderToolState();
+    }
+
+    function setPenType(type) {
+      currentPenType = type === PEN_TYPES.fountain ? PEN_TYPES.fountain : PEN_TYPES.ballpoint;
+      currentTool = DRAWING_TOOLS.pen;
+      renderToolState();
+    }
+
+    function setColor(color) {
+      currentColor = color;
+      elements.colorSwatch.style.setProperty("--color", currentColor);
+      elements.colorPalette.hidden = true;
+      elements.colorMenuButton.setAttribute("aria-expanded", "false");
+      currentTool = DRAWING_TOOLS.pen;
+      renderToolState();
+    }
+
+    function renderToolState() {
+      elements.eraserButton.classList.toggle("active", currentTool === DRAWING_TOOLS.eraser);
+      elements.eraserButton.setAttribute("aria-pressed", String(currentTool === DRAWING_TOOLS.eraser));
+      elements.lassoButton.classList.toggle("active", currentTool === DRAWING_TOOLS.lasso);
+      elements.lassoButton.setAttribute("aria-pressed", String(currentTool === DRAWING_TOOLS.lasso));
+      elements.ballpointButton.classList.toggle("active", currentPenType === PEN_TYPES.ballpoint && currentTool === DRAWING_TOOLS.pen);
+      elements.fountainPenButton.classList.toggle("active", currentPenType === PEN_TYPES.fountain && currentTool === DRAWING_TOOLS.pen);
+      elements.ballpointButton.setAttribute("aria-pressed", String(currentPenType === PEN_TYPES.ballpoint && currentTool === DRAWING_TOOLS.pen));
+      elements.fountainPenButton.setAttribute("aria-pressed", String(currentPenType === PEN_TYPES.fountain && currentTool === DRAWING_TOOLS.pen));
+      elements.clearSelectionButton.disabled = !selection;
+      elements.handwritingCanvas.classList.toggle("lasso-active", currentTool === DRAWING_TOOLS.lasso && !selection);
+      elements.handwritingCanvas.classList.toggle("selection-active", Boolean(selection));
+      elements.handwritingCanvas.style.cursor =
+        currentTool === DRAWING_TOOLS.eraser ? "cell" : currentTool === DRAWING_TOOLS.lasso ? "copy" : "crosshair";
       applyDrawingStyle();
     }
 
@@ -634,12 +944,14 @@
     elements.noteTypeButtons.forEach((button) => {
       button.addEventListener("click", () => addNote(button.dataset.noteType));
     });
+    elements.toggleSidebarButton.addEventListener("click", toggleSidebar);
     elements.themeToggle.addEventListener("click", toggleTheme);
     elements.clearHandwritingButton.addEventListener("click", () => {
       const selected = store.getSelectedNote();
       if (!selected || selected.type !== NOTE_TYPES.handwriting) {
         return;
       }
+      selection = null;
       const pages = getHandwritingPages(selected);
       pages[currentPageIndex] = "";
       clearCanvas();
@@ -655,12 +967,20 @@
     elements.nextPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex + 1));
     elements.addPageButton.addEventListener("click", addHandwritingPage);
     elements.pageIndicatorButton.addEventListener("click", jumpToPage);
-    elements.penColorInput.addEventListener("input", applyDrawingStyle);
-    elements.penSizeInput.addEventListener("input", applyDrawingStyle);
-    elements.eraserButton.addEventListener("click", () => {
-      isEraser = !isEraser;
-      renderEraserState();
+    elements.colorMenuButton.addEventListener("click", () => {
+      const isOpen = elements.colorPalette.hidden;
+      elements.colorPalette.hidden = !isOpen;
+      elements.colorMenuButton.setAttribute("aria-expanded", String(isOpen));
     });
+    elements.colorOptions.forEach((button) => {
+      button.addEventListener("click", () => setColor(button.dataset.color));
+    });
+    elements.penSizeInput.addEventListener("input", applyDrawingStyle);
+    elements.ballpointButton.addEventListener("click", () => setPenType(PEN_TYPES.ballpoint));
+    elements.fountainPenButton.addEventListener("click", () => setPenType(PEN_TYPES.fountain));
+    elements.eraserButton.addEventListener("click", () => setTool(DRAWING_TOOLS.eraser));
+    elements.lassoButton.addEventListener("click", () => setTool(DRAWING_TOOLS.lasso));
+    elements.clearSelectionButton.addEventListener("click", clearSelection);
     elements.handwritingCanvas.addEventListener("pointerdown", startDrawing);
     elements.handwritingCanvas.addEventListener("pointermove", draw);
     elements.handwritingCanvas.addEventListener("pointerup", stopDrawing);
@@ -696,7 +1016,9 @@
 
     render();
     renderThemeToggle();
-    renderEraserState();
+    renderSidebar();
+    setColor(currentColor);
+    renderToolState();
     return { store, render };
   }
 
@@ -707,6 +1029,7 @@
     STORAGE_KEY,
     SELECTED_KEY,
     THEME_KEY,
+    SIDEBAR_KEY,
     createNote,
     createStore,
     getPreview,

@@ -30,19 +30,33 @@
             <span id="saveStatus" aria-live="polite">已保存</span>
           </div>
           <div class="toolbar-actions">
+            <button class="text-button" id="toggleSidebarButton" type="button" aria-pressed="false">隐藏侧栏</button>
             <button class="text-button handwriting-control" id="prevPageButton" type="button">上一页</button>
             <button class="page-indicator handwriting-control" id="pageIndicatorButton" type="button">1 / 1</button>
             <button class="text-button handwriting-control" id="nextPageButton" type="button">下一页</button>
             <button class="text-button handwriting-control" id="addPageButton" type="button">新页</button>
-            <label class="pen-control handwriting-control" title="笔颜色">
-              <span class="visually-hidden">笔颜色</span>
-              <input id="penColorInput" type="color" value="#1f2933">
-            </label>
+            <div class="color-picker handwriting-control">
+              <button class="color-menu-button" id="colorMenuButton" type="button" aria-label="笔颜色" aria-expanded="false">
+                <span id="colorSwatch" class="color-swatch" aria-hidden="true"></span>
+              </button>
+              <div class="color-palette" id="colorPalette" hidden>
+                <button class="color-option" type="button" data-color="#1f2933" style="--color: #1f2933" aria-label="黑色"></button>
+                <button class="color-option" type="button" data-color="#ef4444" style="--color: #ef4444" aria-label="红色"></button>
+                <button class="color-option" type="button" data-color="#2563eb" style="--color: #2563eb" aria-label="蓝色"></button>
+                <button class="color-option" type="button" data-color="#16a34a" style="--color: #16a34a" aria-label="绿色"></button>
+                <button class="color-option" type="button" data-color="#7c3aed" style="--color: #7c3aed" aria-label="紫色"></button>
+                <button class="color-option" type="button" data-color="#eef4ff" style="--color: #eef4ff" aria-label="白色"></button>
+              </div>
+            </div>
             <label class="pen-size-control handwriting-control" title="笔粗细">
               <span class="visually-hidden">笔粗细</span>
               <input id="penSizeInput" type="range" min="1" max="18" value="4" aria-label="笔粗细">
             </label>
+            <button class="text-button handwriting-control active" id="ballpointButton" type="button" aria-pressed="true">圆珠笔</button>
+            <button class="text-button handwriting-control" id="fountainPenButton" type="button" aria-pressed="false">钢笔</button>
             <button class="text-button handwriting-control" id="eraserButton" type="button" aria-pressed="false">橡皮</button>
+            <button class="text-button handwriting-control" id="lassoButton" type="button" aria-pressed="false">套索</button>
+            <button class="text-button handwriting-control" id="clearSelectionButton" type="button">清除选区</button>
             <button class="text-button handwriting-control" id="clearHandwritingButton" type="button">清空</button>
             <button class="text-button danger" id="deleteNoteButton" type="button">删除</button>
           </div>
