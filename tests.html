@@ -65,9 +65,19 @@
           name: "新建笔记后会自动选中",
           run() {
             const store = NotesApp.createStore(createMemoryStorage());
-            const note = store.addNote();
+            const note = store.addNote("text");
             assert(store.getNotes().length === 1, "应该有 1 条笔记");
             assert(store.getSelectedId() === note.id, "新笔记应该被选中");
+            assert(note.type === NotesApp.NOTE_TYPES.text, "默认应该新建文本笔记");
+          }
+        },
+        {
+          name: "createNote 兼容旧参数",
+          run() {
+            const note = NotesApp.createNote("旧标题", "旧内容");
+            assert(note.type === NotesApp.NOTE_TYPES.text, "旧参数应该创建文本笔记");
+            assert(note.title === "旧标题", "旧标题应该保留");
+            assert(note.content === "旧内容", "旧内容应该保留");
           }
         },
         {
@@ -75,7 +85,7 @@
           run() {
             const storage = createMemoryStorage();
             const store = NotesApp.createStore(storage);
-            store.addNote();
+            store.addNote("text");
             store.updateSelected({ title: "会议记录", content: "确认发布时间" });
 
             const reloaded = NotesApp.createStore(storage);
@@ -101,7 +111,7 @@
           run() {
             assert(NotesApp.getDisplayTitle("   ") === "未命名笔记", "空标题占位错误");
             assert(NotesApp.getPreview("\n\t") === "暂无内容", "空内容占位错误");
-            assert(NotesApp.getPreview("", "data:image/png;base64,abc") === "手写笔记", "手写内容占位错误");
+            assert(NotesApp.getPreview("", ["data:image/png;base64,abc"]) === "手写笔记", "手写内容占位错误");
           }
         },
         {
@@ -132,19 +142,31 @@
           run() {
             const storage = createMemoryStorage();
             const store = NotesApp.createStore(storage);
-            store.addNote();
-            store.updateSelected({ handwriting: "data:image/png;base64,abc" });
+            store.addNote("handwriting");
+            store.updateSelected({
+              handwriting: "data:image/png;base64,abc",
+              handwritingPages: ["data:image/png;base64,abc", "data:image/png;base64,def"]
+            });
 
             const reloaded = NotesApp.createStore(storage);
-            assert(reloaded.getSelectedNote().handwriting === "data:image/png;base64,abc", "手写内容应该保存");
+            const note = reloaded.getSelectedNote();
+            assert(note.type === NotesApp.NOTE_TYPES.handwriting, "应该保持手写笔记类型");
+            assert(note.handwritingPages.length === 2, "手写分页应该保存");
+            assert(note.handwritingPages[1] === "data:image/png;base64,def", "第二页手写内容应该保存");
           }
         },
         {
-          name: "输入模式偏好会读取手写模式",
+          name: "旧手写内容会迁移为手写笔记",
           run() {
             const storage = createMemoryStorage();
-            storage.setItem(NotesApp.INPUT_MODE_KEY, "handwriting");
-            assert(NotesApp.getInitialInputMode(storage) === "handwriting", "应该读取手写模式偏好");
+            storage.setItem(
+              NotesApp.STORAGE_KEY,
+              JSON.stringify([{ id: "old", title: "旧手写", content: "", handwriting: "data:image/png;base64,abc", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }])
+            );
+            const store = NotesApp.createStore(storage);
+            const note = store.getSelectedNote();
+            assert(note.type === NotesApp.NOTE_TYPES.handwriting, "旧手写内容应该识别为手写笔记");
+            assert(note.handwritingPages[0] === "data:image/png;base64,abc", "旧手写内容应该成为第一页");
           }
         }
       ];

@@ -29,21 +29,20 @@
             <span id="noteCount">0 条笔记</span>
             <span id="saveStatus" aria-live="polite">已保存</span>
           </div>
-          <button class="text-button danger" id="deleteNoteButton" type="button">删除</button>
+          <div class="toolbar-actions">
+            <button class="text-button handwriting-control" id="prevPageButton" type="button">上一页</button>
+            <span class="page-indicator handwriting-control" id="pageIndicator">1 / 1</span>
+            <button class="text-button handwriting-control" id="nextPageButton" type="button">下一页</button>
+            <button class="text-button handwriting-control" id="addPageButton" type="button">新页</button>
+            <button class="text-button handwriting-control" id="clearHandwritingButton" type="button">清空</button>
+            <button class="text-button danger" id="deleteNoteButton" type="button">删除</button>
+          </div>
         </header>
 
         <div class="editor-fields" id="editorFields">
           <input class="title-input" id="titleInput" type="text" placeholder="标题" aria-label="标题">
-          <div class="input-mode-tabs" role="group" aria-label="输入模式">
-            <button class="text-button mode-button active" id="textModeButton" type="button" aria-pressed="true">文本</button>
-            <button class="text-button mode-button" id="handwritingModeButton" type="button" aria-pressed="false">手写</button>
-          </div>
           <textarea class="content-input" id="contentInput" placeholder="开始记录..." aria-label="内容"></textarea>
           <section class="handwriting-panel" id="handwritingPanel" aria-label="手写内容" hidden>
-            <div class="handwriting-toolbar">
-              <span>手写板</span>
-              <button class="text-button" id="clearHandwritingButton" type="button">清空</button>
-            </div>
             <canvas class="handwriting-canvas" id="handwritingCanvas" width="900" height="560" aria-label="手写画布"></canvas>
           </section>
         </div>
@@ -60,6 +59,17 @@
       <span class="theme-toggle-icon" aria-hidden="true">◐</span>
       <span id="themeToggleText">深色</span>
     </button>
+
+    <div class="note-type-dialog" id="noteTypeDialog" role="dialog" aria-modal="true" aria-labelledby="noteTypeTitle" hidden>
+      <div class="note-type-panel">
+        <h2 id="noteTypeTitle">新建笔记</h2>
+        <div class="note-type-actions">
+          <button class="text-button primary note-type-button" type="button" data-note-type="text">文本笔记</button>
+          <button class="text-button primary note-type-button" type="button" data-note-type="handwriting">手写笔记</button>
+        </div>
+        <button class="text-button" id="cancelNoteTypeButton" type="button">取消</button>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

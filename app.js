@@ -4,10 +4,12 @@
   const STORAGE_KEY = "html-notes-app.notes";
   const SELECTED_KEY = "html-notes-app.selected";
   const THEME_KEY = "html-notes-app.theme";
-  const INPUT_MODE_KEY = "html-notes-app.input-mode";
   const APP_NAME = "lrc神金笔记";
   const APP_LOGO_SRC = "assets/logo-bird.png";
-  const DEFAULT_INPUT_MODE = "text";
+  const NOTE_TYPES = {
+    text: "text",
+    handwriting: "handwriting"
+  };
   const THEMES = {
     light: {
       value: "light",
@@ -32,24 +34,45 @@
 
   const nowIso = () => new Date().toISOString();
 
-  function createNote(title = "未命名笔记", content = "") {
+  function createNote(type = NOTE_TYPES.text, title = "未命名笔记", content = "") {
     const timestamp = nowIso();
+    const isExplicitType = type === NOTE_TYPES.text || type === NOTE_TYPES.handwriting;
+    const noteType = type === NOTE_TYPES.handwriting ? NOTE_TYPES.handwriting : NOTE_TYPES.text;
+    const noteTitle = isExplicitType ? title : type;
+    const noteContent = isExplicitType ? content : title;
     return {
       id: createId(),
-      title,
-      content,
+      type: noteType,
+      title: typeof noteTitle === "string" && noteTitle ? noteTitle : "未命名笔记",
+      content: noteType === NOTE_TYPES.text && typeof noteContent === "string" ? noteContent : "",
       handwriting: "",
+      handwritingPages: [""],
       createdAt: timestamp,
       updatedAt: timestamp
     };
   }
 
   function normalizeNote(note) {
+    const handwritingPages = Array.isArray(note.handwritingPages)
+      ? note.handwritingPages.filter((page) => typeof page === "string")
+      : [];
+    if (handwritingPages.length === 0 && typeof note.handwriting === "string" && note.handwriting) {
+      handwritingPages.push(note.handwriting);
+    }
+    if (handwritingPages.length === 0) {
+      handwritingPages.push("");
+    }
+    const noteType =
+      note.type === NOTE_TYPES.handwriting || (!note.type && handwritingPages.some(Boolean))
+        ? NOTE_TYPES.handwriting
+        : NOTE_TYPES.text;
     return {
       id: typeof note.id === "string" && note.id ? note.id : createId(),
+      type: noteType,
       title: typeof note.title === "string" ? note.title : "未命名笔记",
-      content: typeof note.content === "string" ? note.content : "",
-      handwriting: typeof note.handwriting === "string" ? note.handwriting : "",
+      content: noteType === NOTE_TYPES.text && typeof note.content === "string" ? note.content : "",
+      handwriting: handwritingPages.find(Boolean) || "",
+      handwritingPages,
       createdAt: typeof note.createdAt === "string" ? note.createdAt : nowIso(),
       updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : nowIso()
     };
@@ -75,12 +98,16 @@
     storage.setItem(STORAGE_KEY, JSON.stringify(notes));
   }
 
-  function getPreview(content, handwriting = "") {
+  function hasHandwritingPages(handwritingPages) {
+    return Array.isArray(handwritingPages) && handwritingPages.some((page) => typeof page === "string" && page);
+  }
+
+  function getPreview(content, handwritingPages = []) {
     const preview = content.replace(/\s+/g, " ").trim();
     if (preview) {
       return preview;
     }
-    return handwriting ? "手写笔记" : "暂无内容";
+    return hasHandwritingPages(handwritingPages) ? "手写笔记" : "暂无内容";
   }
 
   function getDisplayTitle(title) {
@@ -121,11 +148,6 @@
     return nextTheme;
   }
 
-  function getInitialInputMode(storage) {
-    const savedMode = storage.getItem(INPUT_MODE_KEY);
-    return savedMode === "handwriting" ? "handwriting" : DEFAULT_INPUT_MODE;
-  }
-
   function createStore(storage) {
     let notes = loadNotes(storage);
     let selectedId = storage.getItem(SELECTED_KEY);
@@ -153,8 +175,8 @@
       getSelectedNote() {
         return notes.find((note) => note.id === selectedId) || null;
       },
-      addNote() {
-        const note = createNote();
+      addNote(type = NOTE_TYPES.text) {
+        const note = createNote(type);
         notes = [note].concat(notes);
         selectedId = note.id;
         persist();
@@ -205,20 +227,26 @@
       saveStatus: documentRef.getElementById("saveStatus"),
       themeToggle: documentRef.getElementById("themeToggle"),
       themeToggleText: documentRef.getElementById("themeToggleText"),
-      textModeButton: documentRef.getElementById("textModeButton"),
-      handwritingModeButton: documentRef.getElementById("handwritingModeButton"),
       titleInput: documentRef.getElementById("titleInput"),
       contentInput: documentRef.getElementById("contentInput"),
       handwritingPanel: documentRef.getElementById("handwritingPanel"),
       handwritingCanvas: documentRef.getElementById("handwritingCanvas"),
       clearHandwritingButton: documentRef.getElementById("clearHandwritingButton"),
+      prevPageButton: documentRef.getElementById("prevPageButton"),
+      nextPageButton: documentRef.getElementById("nextPageButton"),
+      addPageButton: documentRef.getElementById("addPageButton"),
+      pageIndicator: documentRef.getElementById("pageIndicator"),
+      handwritingControls: Array.from(documentRef.querySelectorAll(".handwriting-control")),
       editorFields: documentRef.getElementById("editorFields"),
-      emptyState: documentRef.getElementById("emptyState")
+      emptyState: documentRef.getElementById("emptyState"),
+      noteTypeDialog: documentRef.getElementById("noteTypeDialog"),
+      noteTypeButtons: Array.from(documentRef.querySelectorAll("[data-note-type]")),
+      cancelNoteTypeButton: documentRef.getElementById("cancelNoteTypeButton")
     };
 
     const store = createStore(storage);
     let currentTheme = applyTheme(documentRef, getInitialTheme(storage));
-    let currentInputMode = getInitialInputMode(storage);
+    let currentPageIndex = 0;
     let saveTimer = 0;
     let isDrawing = false;
     let lastPoint = null;
@@ -243,7 +271,12 @@
         return notes;
       }
       return notes.filter((note) => {
-        return note.title.toLowerCase().includes(query) || note.content.toLowerCase().includes(query);
+        const typeLabel = note.type === NOTE_TYPES.handwriting ? "手写笔记" : "文本笔记";
+        return (
+          note.title.toLowerCase().includes(query) ||
+          note.content.toLowerCase().includes(query) ||
+          typeLabel.includes(query)
+        );
       });
     }
 
@@ -266,7 +299,7 @@
 
         const preview = documentRef.createElement("span");
         preview.className = "note-preview";
-        preview.textContent = getPreview(note.content, note.handwriting);
+        preview.textContent = getPreview(note.content, note.handwritingPages);
 
         const date = documentRef.createElement("span");
         date.className = "note-date";
@@ -286,6 +319,12 @@
       elements.editorFields.hidden = !hasNote;
       elements.emptyState.hidden = hasNote;
       elements.deleteNoteButton.disabled = !hasNote;
+      const isHandwriting = selected?.type === NOTE_TYPES.handwriting;
+      elements.contentInput.hidden = !hasNote || isHandwriting;
+      elements.handwritingPanel.hidden = !hasNote || !isHandwriting;
+      elements.handwritingControls.forEach((control) => {
+        control.hidden = !hasNote || !isHandwriting;
+      });
 
       if (!selected) {
         elements.titleInput.value = "";
@@ -300,13 +339,17 @@
       if (documentRef.activeElement !== elements.contentInput) {
         elements.contentInput.value = selected.content;
       }
-      renderHandwriting(selected.handwriting);
+      if (isHandwriting) {
+        const pages = getHandwritingPages(selected);
+        currentPageIndex = Math.min(currentPageIndex, pages.length - 1);
+        renderHandwriting(pages[currentPageIndex]);
+        renderPageControls(pages);
+      }
     }
 
     function render() {
       renderList();
       renderEditor();
-      renderInputMode();
     }
 
     function renderThemeToggle() {
@@ -320,26 +363,28 @@
       currentTheme = applyTheme(documentRef, currentTheme === "dark" ? "light" : "dark");
       storage.setItem(THEME_KEY, currentTheme);
       renderThemeToggle();
-      renderHandwriting(store.getSelectedNote()?.handwriting || "");
-    }
-
-    function renderInputMode() {
-      const isHandwriting = currentInputMode === "handwriting";
-      elements.contentInput.hidden = isHandwriting;
-      elements.handwritingPanel.hidden = !isHandwriting;
-      elements.textModeButton.classList.toggle("active", !isHandwriting);
-      elements.handwritingModeButton.classList.toggle("active", isHandwriting);
-      elements.textModeButton.setAttribute("aria-pressed", String(!isHandwriting));
-      elements.handwritingModeButton.setAttribute("aria-pressed", String(isHandwriting));
-      if (isHandwriting) {
-        renderHandwriting(store.getSelectedNote()?.handwriting || "");
+      const selected = store.getSelectedNote();
+      if (selected?.type === NOTE_TYPES.handwriting) {
+        renderHandwriting(getHandwritingPages(selected)[currentPageIndex] || "");
       }
     }
 
-    function setInputMode(mode) {
-      currentInputMode = mode === "handwriting" ? "handwriting" : DEFAULT_INPUT_MODE;
-      storage.setItem(INPUT_MODE_KEY, currentInputMode);
-      renderInputMode();
+    function getHandwritingPages(note) {
+      if (!note || note.type !== NOTE_TYPES.handwriting) {
+        return [""];
+      }
+      const pages = Array.isArray(note.handwritingPages) ? note.handwritingPages.slice() : [];
+      return pages.length ? pages : [""];
+    }
+
+    function getFirstHandwritingPage(pages) {
+      return pages.find(Boolean) || "";
+    }
+
+    function renderPageControls(pages) {
+      elements.pageIndicator.textContent = currentPageIndex + 1 + " / " + pages.length;
+      elements.prevPageButton.disabled = currentPageIndex === 0;
+      elements.nextPageButton.disabled = currentPageIndex >= pages.length - 1;
     }
 
     function resizeCanvas() {
@@ -359,7 +404,7 @@
       handwritingContext.lineCap = "round";
       handwritingContext.lineJoin = "round";
       handwritingContext.lineWidth = 3.4;
-      handwritingContext.strokeStyle = currentTheme === "dark" ? "#101828" : "#1f2933";
+      handwritingContext.strokeStyle = currentTheme === "dark" ? "#eef4ff" : "#1f2933";
     }
 
     function clearCanvas() {
@@ -410,9 +455,19 @@
       if (!handwritingContext) {
         return;
       }
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        return;
+      }
       const dataUrl = elements.handwritingCanvas.toDataURL("image/png");
-      store.updateSelected({ handwriting: dataUrl });
+      const pages = getHandwritingPages(selected);
+      pages[currentPageIndex] = dataUrl;
+      store.updateSelected({
+        handwriting: getFirstHandwritingPage(pages),
+        handwritingPages: pages
+      });
       renderList();
+      renderPageControls(pages);
       scheduleSavedStatus();
     }
 
@@ -452,26 +507,79 @@
       saveHandwriting();
     }
 
-    function addNote() {
-      store.addNote();
+    function showNoteTypeDialog() {
+      elements.noteTypeDialog.hidden = false;
+      elements.noteTypeButtons[0]?.focus();
+    }
+
+    function hideNoteTypeDialog() {
+      elements.noteTypeDialog.hidden = true;
+    }
+
+    function addNote(type) {
+      store.addNote(type);
+      currentPageIndex = 0;
       elements.searchInput.value = "";
+      hideNoteTypeDialog();
       render();
       elements.titleInput.focus();
       elements.titleInput.select();
       scheduleSavedStatus();
     }
 
-    elements.newNoteButton.addEventListener("click", addNote);
-    elements.emptyNewNoteButton.addEventListener("click", addNote);
+    function updateCurrentPage(pageIndex) {
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        return;
+      }
+      const pages = getHandwritingPages(selected);
+      currentPageIndex = Math.max(0, Math.min(pageIndex, pages.length - 1));
+      renderHandwriting(pages[currentPageIndex]);
+      renderPageControls(pages);
+    }
+
+    function addHandwritingPage() {
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        return;
+      }
+      const pages = getHandwritingPages(selected);
+      pages.push("");
+      currentPageIndex = pages.length - 1;
+      store.updateSelected({
+        handwriting: getFirstHandwritingPage(pages),
+        handwritingPages: pages
+      });
+      render();
+      scheduleSavedStatus();
+    }
+
+    elements.newNoteButton.addEventListener("click", showNoteTypeDialog);
+    elements.emptyNewNoteButton.addEventListener("click", showNoteTypeDialog);
+    elements.cancelNoteTypeButton.addEventListener("click", hideNoteTypeDialog);
+    elements.noteTypeButtons.forEach((button) => {
+      button.addEventListener("click", () => addNote(button.dataset.noteType));
+    });
     elements.themeToggle.addEventListener("click", toggleTheme);
-    elements.textModeButton.addEventListener("click", () => setInputMode("text"));
-    elements.handwritingModeButton.addEventListener("click", () => setInputMode("handwriting"));
     elements.clearHandwritingButton.addEventListener("click", () => {
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        return;
+      }
+      const pages = getHandwritingPages(selected);
+      pages[currentPageIndex] = "";
       clearCanvas();
-      store.updateSelected({ handwriting: "" });
+      store.updateSelected({
+        handwriting: getFirstHandwritingPage(pages),
+        handwritingPages: pages
+      });
       renderList();
+      renderPageControls(pages);
       scheduleSavedStatus();
     });
+    elements.prevPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex - 1));
+    elements.nextPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex + 1));
+    elements.addPageButton.addEventListener("click", addHandwritingPage);
     elements.handwritingCanvas.addEventListener("pointerdown", startDrawing);
     elements.handwritingCanvas.addEventListener("pointermove", draw);
     elements.handwritingCanvas.addEventListener("pointerup", stopDrawing);
@@ -483,6 +591,7 @@
         return;
       }
       store.selectNote(button.dataset.noteId);
+      currentPageIndex = 0;
       render();
     });
 
@@ -513,10 +622,6 @@
       }
     });
 
-    if (store.getNotes().length === 0) {
-      store.addNote();
-    }
-
     render();
     renderThemeToggle();
     return { store, render };
@@ -525,16 +630,15 @@
   window.NotesApp = {
     APP_NAME,
     APP_LOGO_SRC,
+    NOTE_TYPES,
     STORAGE_KEY,
     SELECTED_KEY,
     THEME_KEY,
-    INPUT_MODE_KEY,
     createNote,
     createStore,
     getPreview,
     getDisplayTitle,
     getInitialTheme,
-    getInitialInputMode,
     applyTheme,
     initApp
   };
