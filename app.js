@@ -235,13 +235,20 @@
       prevPageButton: documentRef.getElementById("prevPageButton"),
       nextPageButton: documentRef.getElementById("nextPageButton"),
       addPageButton: documentRef.getElementById("addPageButton"),
-      pageIndicator: documentRef.getElementById("pageIndicator"),
+      pageIndicatorButton: documentRef.getElementById("pageIndicatorButton"),
+      penColorInput: documentRef.getElementById("penColorInput"),
+      penSizeInput: documentRef.getElementById("penSizeInput"),
+      eraserButton: documentRef.getElementById("eraserButton"),
       handwritingControls: Array.from(documentRef.querySelectorAll(".handwriting-control")),
       editorFields: documentRef.getElementById("editorFields"),
       emptyState: documentRef.getElementById("emptyState"),
       noteTypeDialog: documentRef.getElementById("noteTypeDialog"),
       noteTypeButtons: Array.from(documentRef.querySelectorAll("[data-note-type]")),
-      cancelNoteTypeButton: documentRef.getElementById("cancelNoteTypeButton")
+      cancelNoteTypeButton: documentRef.getElementById("cancelNoteTypeButton"),
+      deleteConfirmDialog: documentRef.getElementById("deleteConfirmDialog"),
+      deleteConfirmText: documentRef.getElementById("deleteConfirmText"),
+      confirmDeleteButton: documentRef.getElementById("confirmDeleteButton"),
+      cancelDeleteButton: documentRef.getElementById("cancelDeleteButton")
     };
 
     const store = createStore(storage);
@@ -250,6 +257,7 @@
     let saveTimer = 0;
     let isDrawing = false;
     let lastPoint = null;
+    let isEraser = false;
     const handwritingContext = elements.handwritingCanvas.getContext
       ? elements.handwritingCanvas.getContext("2d")
       : null;
@@ -382,9 +390,27 @@
     }
 
     function renderPageControls(pages) {
-      elements.pageIndicator.textContent = currentPageIndex + 1 + " / " + pages.length;
+      elements.pageIndicatorButton.textContent = currentPageIndex + 1 + " / " + pages.length;
+      elements.pageIndicatorButton.title = "跳转页码";
       elements.prevPageButton.disabled = currentPageIndex === 0;
       elements.nextPageButton.disabled = currentPageIndex >= pages.length - 1;
+    }
+
+    function getPenSize() {
+      const size = Number(elements.penSizeInput.value);
+      return Number.isFinite(size) ? Math.max(1, Math.min(18, size)) : 4;
+    }
+
+    function applyDrawingStyle() {
+      if (!handwritingContext) {
+        return;
+      }
+      handwritingContext.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
+      handwritingContext.lineCap = "round";
+      handwritingContext.lineJoin = "round";
+      handwritingContext.lineWidth = isEraser ? getPenSize() * 2.2 : getPenSize();
+      handwritingContext.strokeStyle = isEraser ? "rgba(0, 0, 0, 1)" : elements.penColorInput.value;
+      handwritingContext.fillStyle = handwritingContext.strokeStyle;
     }
 
     function resizeCanvas() {
@@ -401,10 +427,7 @@
         canvas.height = Math.round(cssHeight * ratio);
       }
       handwritingContext.setTransform(ratio, 0, 0, ratio, 0, 0);
-      handwritingContext.lineCap = "round";
-      handwritingContext.lineJoin = "round";
-      handwritingContext.lineWidth = 3.4;
-      handwritingContext.strokeStyle = currentTheme === "dark" ? "#eef4ff" : "#1f2933";
+      applyDrawingStyle();
     }
 
     function clearCanvas() {
@@ -430,7 +453,10 @@
         const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
         const cssWidth = Math.max(1, Math.round(rect?.width || canvas.width || 900));
         const cssHeight = Math.max(1, Math.round(rect?.height || canvas.height || 560));
+        const previousOperation = handwritingContext.globalCompositeOperation;
+        handwritingContext.globalCompositeOperation = "source-over";
         handwritingContext.drawImage(image, 0, 0, cssWidth, cssHeight);
+        handwritingContext.globalCompositeOperation = previousOperation;
       };
       image.src = dataUrl;
     }
@@ -446,8 +472,7 @@
 
     function drawPoint(point) {
       handwritingContext.beginPath();
-      handwritingContext.arc(point.x, point.y, 1.7, 0, Math.PI * 2);
-      handwritingContext.fillStyle = handwritingContext.strokeStyle;
+      handwritingContext.arc(point.x, point.y, handwritingContext.lineWidth / 2, 0, Math.PI * 2);
       handwritingContext.fill();
     }
 
@@ -538,6 +563,23 @@
       renderPageControls(pages);
     }
 
+    function jumpToPage() {
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        return;
+      }
+      const pages = getHandwritingPages(selected);
+      const answer = window.prompt("跳转到页码（1-" + pages.length + "）", String(currentPageIndex + 1));
+      if (answer === null) {
+        return;
+      }
+      const pageNumber = Number.parseInt(answer, 10);
+      if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pages.length) {
+        return;
+      }
+      updateCurrentPage(pageNumber - 1);
+    }
+
     function addHandwritingPage() {
       const selected = store.getSelectedNote();
       if (!selected || selected.type !== NOTE_TYPES.handwriting) {
@@ -550,6 +592,38 @@
         handwriting: getFirstHandwritingPage(pages),
         handwritingPages: pages
       });
+      render();
+      scheduleSavedStatus();
+    }
+
+    function renderEraserState() {
+      elements.eraserButton.classList.toggle("active", isEraser);
+      elements.eraserButton.setAttribute("aria-pressed", String(isEraser));
+      elements.handwritingCanvas.style.cursor = isEraser ? "cell" : "crosshair";
+      applyDrawingStyle();
+    }
+
+    function showDeleteDialog() {
+      const selected = store.getSelectedNote();
+      if (!selected) {
+        return;
+      }
+      elements.deleteConfirmText.textContent = "确定删除“" + getDisplayTitle(selected.title) + "”吗？";
+      elements.deleteConfirmDialog.hidden = false;
+      elements.confirmDeleteButton.focus();
+    }
+
+    function hideDeleteDialog() {
+      elements.deleteConfirmDialog.hidden = true;
+    }
+
+    function deleteSelectedNote() {
+      if (!store.getSelectedNote()) {
+        return;
+      }
+      hideDeleteDialog();
+      store.deleteSelected();
+      currentPageIndex = 0;
       render();
       scheduleSavedStatus();
     }
@@ -580,6 +654,13 @@
     elements.prevPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex - 1));
     elements.nextPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex + 1));
     elements.addPageButton.addEventListener("click", addHandwritingPage);
+    elements.pageIndicatorButton.addEventListener("click", jumpToPage);
+    elements.penColorInput.addEventListener("input", applyDrawingStyle);
+    elements.penSizeInput.addEventListener("input", applyDrawingStyle);
+    elements.eraserButton.addEventListener("click", () => {
+      isEraser = !isEraser;
+      renderEraserState();
+    });
     elements.handwritingCanvas.addEventListener("pointerdown", startDrawing);
     elements.handwritingCanvas.addEventListener("pointermove", draw);
     elements.handwritingCanvas.addEventListener("pointerup", stopDrawing);
@@ -609,21 +690,13 @@
       scheduleSavedStatus();
     });
 
-    elements.deleteNoteButton.addEventListener("click", () => {
-      const selected = store.getSelectedNote();
-      if (!selected) {
-        return;
-      }
-      const title = getDisplayTitle(selected.title);
-      if (window.confirm("删除“" + title + "”？")) {
-        store.deleteSelected();
-        render();
-        scheduleSavedStatus();
-      }
-    });
+    elements.deleteNoteButton.addEventListener("click", showDeleteDialog);
+    elements.confirmDeleteButton.addEventListener("click", deleteSelectedNote);
+    elements.cancelDeleteButton.addEventListener("click", hideDeleteDialog);
 
     render();
     renderThemeToggle();
+    renderEraserState();
     return { store, render };
   }
 

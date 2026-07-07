@@ -233,9 +233,21 @@ button {
 }
 
 .page-indicator {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--muted);
   font-size: 14px;
   white-space: nowrap;
+}
+
+.page-indicator:hover,
+.page-indicator:focus-visible {
+  border-color: var(--line);
+  color: var(--text);
+  outline: none;
 }
 
 .text-button {
@@ -256,6 +268,43 @@ button {
 .text-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.pen-control,
+.pen-size-control {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.pen-control {
+  width: 42px;
+  justify-content: center;
+}
+
+.pen-control input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.pen-size-control {
+  width: 96px;
+  padding: 0 8px;
+}
+
+.pen-size-control input {
+  width: 100%;
+}
+
+.text-button.active {
+  border-color: var(--accent);
+  background: var(--active-bg);
 }
 
 .theme-toggle {
@@ -362,6 +411,12 @@ button {
   font-size: 20px;
 }
 
+.note-type-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .note-type-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -425,6 +480,7 @@ button {
 
   .editor-toolbar {
     min-height: 58px;
+    align-items: flex-start;
   }
 
   .theme-toggle {

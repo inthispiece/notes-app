@@ -31,9 +31,18 @@
           </div>
           <div class="toolbar-actions">
             <button class="text-button handwriting-control" id="prevPageButton" type="button">上一页</button>
-            <span class="page-indicator handwriting-control" id="pageIndicator">1 / 1</span>
+            <button class="page-indicator handwriting-control" id="pageIndicatorButton" type="button">1 / 1</button>
             <button class="text-button handwriting-control" id="nextPageButton" type="button">下一页</button>
             <button class="text-button handwriting-control" id="addPageButton" type="button">新页</button>
+            <label class="pen-control handwriting-control" title="笔颜色">
+              <span class="visually-hidden">笔颜色</span>
+              <input id="penColorInput" type="color" value="#1f2933">
+            </label>
+            <label class="pen-size-control handwriting-control" title="笔粗细">
+              <span class="visually-hidden">笔粗细</span>
+              <input id="penSizeInput" type="range" min="1" max="18" value="4" aria-label="笔粗细">
+            </label>
+            <button class="text-button handwriting-control" id="eraserButton" type="button" aria-pressed="false">橡皮</button>
             <button class="text-button handwriting-control" id="clearHandwritingButton" type="button">清空</button>
             <button class="text-button danger" id="deleteNoteButton" type="button">删除</button>
           </div>
@@ -68,6 +77,17 @@
           <button class="text-button primary note-type-button" type="button" data-note-type="handwriting">手写笔记</button>
         </div>
         <button class="text-button" id="cancelNoteTypeButton" type="button">取消</button>
+      </div>
+    </div>
+
+    <div class="note-type-dialog" id="deleteConfirmDialog" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle" hidden>
+      <div class="note-type-panel">
+        <h2 id="deleteConfirmTitle">删除笔记</h2>
+        <p id="deleteConfirmText">确定删除这条笔记吗？</p>
+        <div class="note-type-actions">
+          <button class="text-button danger" id="confirmDeleteButton" type="button">删除</button>
+          <button class="text-button" id="cancelDeleteButton" type="button">取消</button>
+        </div>
       </div>
     </div>
 
