@@ -132,6 +132,12 @@
           }
         },
         {
+          name: "应用版本为 1.0.0",
+          run() {
+            assert(NotesApp.APP_VERSION === "1.0.0", "正式版版本号应该保持一致");
+          }
+        },
+        {
           name: "应用 logo 使用指定图片",
           run() {
             assert(NotesApp.APP_LOGO_SRC === "assets/logo-bird.png", "logo 路径应该指向指定图片");

@@ -105,6 +105,20 @@
       </div>
     </div>
 
+    <div class="note-type-dialog" id="pageJumpDialog" role="dialog" aria-modal="true" aria-labelledby="pageJumpTitle" hidden>
+      <div class="note-type-panel">
+        <h2 id="pageJumpTitle">跳转页码</h2>
+        <label class="page-jump-field">
+          <span id="pageJumpHint">输入页码</span>
+          <input id="pageJumpInput" type="number" min="1" step="1" inputmode="numeric">
+        </label>
+        <div class="note-type-actions">
+          <button class="text-button primary" id="confirmPageJumpButton" type="button">跳转</button>
+          <button class="text-button" id="cancelPageJumpButton" type="button">取消</button>
+        </div>
+      </div>
+    </div>
+
     <script src="app.js"></script>
   </body>
 </html>

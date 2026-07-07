@@ -462,6 +462,28 @@ button {
   line-height: 1.5;
 }
 
+.page-jump-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.page-jump-field input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.page-jump-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+}
+
 .note-type-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

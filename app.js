@@ -6,6 +6,7 @@
   const THEME_KEY = "html-notes-app.theme";
   const SIDEBAR_KEY = "html-notes-app.sidebar";
   const APP_NAME = "lrc神金笔记";
+  const APP_VERSION = "1.0.0";
   const APP_LOGO_SRC = "assets/logo-bird.png";
   const NOTE_TYPES = {
     text: "text",
@@ -271,7 +272,12 @@
       deleteConfirmDialog: documentRef.getElementById("deleteConfirmDialog"),
       deleteConfirmText: documentRef.getElementById("deleteConfirmText"),
       confirmDeleteButton: documentRef.getElementById("confirmDeleteButton"),
-      cancelDeleteButton: documentRef.getElementById("cancelDeleteButton")
+      cancelDeleteButton: documentRef.getElementById("cancelDeleteButton"),
+      pageJumpDialog: documentRef.getElementById("pageJumpDialog"),
+      pageJumpHint: documentRef.getElementById("pageJumpHint"),
+      pageJumpInput: documentRef.getElementById("pageJumpInput"),
+      confirmPageJumpButton: documentRef.getElementById("confirmPageJumpButton"),
+      cancelPageJumpButton: documentRef.getElementById("cancelPageJumpButton")
     };
 
     const store = createStore(storage);
@@ -598,6 +604,13 @@
       context.closePath();
     }
 
+    function traceSelectionPath(context, selected) {
+      context.beginPath();
+      context.moveTo(selected.x + selected.pathPoints[0].x, selected.y + selected.pathPoints[0].y);
+      selected.pathPoints.slice(1).forEach((point) => context.lineTo(selected.x + point.x, selected.y + point.y));
+      context.closePath();
+    }
+
     function extractSelection() {
       if (lassoPoints.length < 3 || !handwritingContext?.clip || !handwritingContext?.save) {
         lassoPoints = [];
@@ -640,14 +653,19 @@
         y: bounds.y,
         width: bounds.width,
         height: bounds.height,
+        pathPoints: lassoPoints.map((point) => ({
+          x: point.x - bounds.x,
+          y: point.y - bounds.y
+        })),
         baseImage: getCanvasImageData()
       };
       lassoPoints = [];
-      drawSelection();
+      drawSelection(false);
       saveHandwriting();
+      drawSelection(true);
     }
 
-    function drawSelection() {
+    function drawSelection(showOutline = true) {
       if (!selection || !handwritingContext) {
         return;
       }
@@ -657,21 +675,49 @@
       const previousWidth = handwritingContext.lineWidth;
       handwritingContext.globalCompositeOperation = "source-over";
       handwritingContext.drawImage(selection.image, selection.x, selection.y, selection.width, selection.height);
-      handwritingContext.strokeStyle = "#2f6fed";
-      handwritingContext.lineWidth = 1.5;
-      handwritingContext.strokeRect?.(selection.x, selection.y, selection.width, selection.height);
+      if (showOutline && selection.pathPoints.length > 1) {
+        handwritingContext.strokeStyle = "#2f6fed";
+        handwritingContext.lineWidth = 1.5;
+        traceSelectionPath(handwritingContext, selection);
+        handwritingContext.stroke();
+      }
       handwritingContext.globalCompositeOperation = previousOperation;
       handwritingContext.strokeStyle = previousStroke;
       handwritingContext.lineWidth = previousWidth;
     }
 
+    function isPointInPolygon(point, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i) {
+        const xi = polygon[i].x;
+        const yi = polygon[i].y;
+        const xj = polygon[j].x;
+        const yj = polygon[j].y;
+        const crosses = yi > point.y !== yj > point.y;
+        if (crosses) {
+          const xAtY = ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+          if (point.x < xAtY) {
+            inside = !inside;
+          }
+        }
+      }
+      return inside;
+    }
+
     function isPointInSelection(point) {
+      if (!selection) {
+        return false;
+      }
+      const localPoint = {
+        x: point.x - selection.x,
+        y: point.y - selection.y
+      };
       return (
-        selection &&
-        point.x >= selection.x &&
-        point.x <= selection.x + selection.width &&
-        point.y >= selection.y &&
-        point.y <= selection.y + selection.height
+        localPoint.x >= 0 &&
+        localPoint.x <= selection.width &&
+        localPoint.y >= 0 &&
+        localPoint.y <= selection.height &&
+        isPointInPolygon(localPoint, selection.pathPoints)
       );
     }
 
@@ -679,7 +725,7 @@
       if (!selection) {
         return false;
       }
-      drawSelection();
+      drawSelection(false);
       selection = null;
       saveHandwriting();
       renderToolState();
@@ -787,7 +833,7 @@
       event.preventDefault();
       if (currentTool === DRAWING_TOOLS.lasso && isDraggingSelection) {
         isDraggingSelection = false;
-        drawSelection();
+        drawSelection(false);
         selection = null;
         saveHandwriting();
         renderToolState();
@@ -845,14 +891,30 @@
         return;
       }
       const pages = getHandwritingPages(selected);
-      const answer = window.prompt("跳转到页码（1-" + pages.length + "）", String(currentPageIndex + 1));
-      if (answer === null) {
+      elements.pageJumpHint.textContent = "输入页码（1-" + pages.length + "）";
+      elements.pageJumpInput.max = String(pages.length);
+      elements.pageJumpInput.value = String(currentPageIndex + 1);
+      elements.pageJumpDialog.hidden = false;
+      elements.pageJumpInput.focus();
+      elements.pageJumpInput.select();
+    }
+
+    function hidePageJumpDialog() {
+      elements.pageJumpDialog.hidden = true;
+    }
+
+    function confirmPageJump() {
+      const selected = store.getSelectedNote();
+      if (!selected || selected.type !== NOTE_TYPES.handwriting) {
+        hidePageJumpDialog();
         return;
       }
-      const pageNumber = Number.parseInt(answer, 10);
+      const pages = getHandwritingPages(selected);
+      const pageNumber = Number.parseInt(elements.pageJumpInput.value, 10);
       if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pages.length) {
         return;
       }
+      hidePageJumpDialog();
       updateCurrentPage(pageNumber - 1);
     }
 
@@ -882,12 +944,18 @@
     }
 
     function setPenType(type) {
+      if (currentTool === DRAWING_TOOLS.lasso) {
+        commitSelection();
+      }
       currentPenType = type === PEN_TYPES.fountain ? PEN_TYPES.fountain : PEN_TYPES.ballpoint;
       currentTool = DRAWING_TOOLS.pen;
       renderToolState();
     }
 
     function setColor(color) {
+      if (currentTool === DRAWING_TOOLS.lasso) {
+        commitSelection();
+      }
       currentColor = color;
       elements.colorSwatch.style.setProperty("--color", currentColor);
       elements.colorPalette.hidden = true;
@@ -967,6 +1035,16 @@
     elements.nextPageButton.addEventListener("click", () => updateCurrentPage(currentPageIndex + 1));
     elements.addPageButton.addEventListener("click", addHandwritingPage);
     elements.pageIndicatorButton.addEventListener("click", jumpToPage);
+    elements.confirmPageJumpButton.addEventListener("click", confirmPageJump);
+    elements.cancelPageJumpButton.addEventListener("click", hidePageJumpDialog);
+    elements.pageJumpInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        confirmPageJump();
+      }
+      if (event.key === "Escape") {
+        hidePageJumpDialog();
+      }
+    });
     elements.colorMenuButton.addEventListener("click", () => {
       const isOpen = elements.colorPalette.hidden;
       elements.colorPalette.hidden = !isOpen;
@@ -1024,6 +1102,7 @@
 
   window.NotesApp = {
     APP_NAME,
+    APP_VERSION,
     APP_LOGO_SRC,
     NOTE_TYPES,
     STORAGE_KEY,
