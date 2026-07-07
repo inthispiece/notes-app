@@ -100,27 +100,15 @@ button {
 
 .brand-logo {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: 48px;
+  height: 32px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
 }
 
-.brand-logo-body,
-.brand-logo-wing,
-.brand-logo-beak {
-  fill: none;
-  stroke: var(--accent);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 3;
-}
-
-.brand-logo-wing {
-  stroke: var(--muted);
-  stroke-width: 2.5;
-}
-
-.brand-logo-eye {
-  fill: var(--text);
+:root[data-theme="dark"] .brand-logo {
+  filter: invert(1);
+  mix-blend-mode: screen;
 }
 
 .icon-button {

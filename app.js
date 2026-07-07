@@ -5,6 +5,7 @@
   const SELECTED_KEY = "html-notes-app.selected";
   const THEME_KEY = "html-notes-app.theme";
   const APP_NAME = "lrc神金笔记";
+  const APP_LOGO_SRC = "assets/logo-bird.png";
   const THEMES = {
     light: {
       value: "light",
@@ -355,6 +356,7 @@
 
   window.NotesApp = {
     APP_NAME,
+    APP_LOGO_SRC,
     STORAGE_KEY,
     SELECTED_KEY,
     THEME_KEY,
