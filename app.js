@@ -4,8 +4,10 @@
   const STORAGE_KEY = "html-notes-app.notes";
   const SELECTED_KEY = "html-notes-app.selected";
   const THEME_KEY = "html-notes-app.theme";
+  const INPUT_MODE_KEY = "html-notes-app.input-mode";
   const APP_NAME = "lrc神金笔记";
   const APP_LOGO_SRC = "assets/logo-bird.png";
+  const DEFAULT_INPUT_MODE = "text";
   const THEMES = {
     light: {
       value: "light",
@@ -36,6 +38,7 @@
       id: createId(),
       title,
       content,
+      handwriting: "",
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -46,6 +49,7 @@
       id: typeof note.id === "string" && note.id ? note.id : createId(),
       title: typeof note.title === "string" ? note.title : "未命名笔记",
       content: typeof note.content === "string" ? note.content : "",
+      handwriting: typeof note.handwriting === "string" ? note.handwriting : "",
       createdAt: typeof note.createdAt === "string" ? note.createdAt : nowIso(),
       updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : nowIso()
     };
@@ -71,9 +75,12 @@
     storage.setItem(STORAGE_KEY, JSON.stringify(notes));
   }
 
-  function getPreview(content) {
+  function getPreview(content, handwriting = "") {
     const preview = content.replace(/\s+/g, " ").trim();
-    return preview || "暂无内容";
+    if (preview) {
+      return preview;
+    }
+    return handwriting ? "手写笔记" : "暂无内容";
   }
 
   function getDisplayTitle(title) {
@@ -112,6 +119,11 @@
     const nextTheme = theme === "dark" ? "dark" : "light";
     documentRef.documentElement.dataset.theme = nextTheme;
     return nextTheme;
+  }
+
+  function getInitialInputMode(storage) {
+    const savedMode = storage.getItem(INPUT_MODE_KEY);
+    return savedMode === "handwriting" ? "handwriting" : DEFAULT_INPUT_MODE;
   }
 
   function createStore(storage) {
@@ -193,15 +205,26 @@
       saveStatus: documentRef.getElementById("saveStatus"),
       themeToggle: documentRef.getElementById("themeToggle"),
       themeToggleText: documentRef.getElementById("themeToggleText"),
+      textModeButton: documentRef.getElementById("textModeButton"),
+      handwritingModeButton: documentRef.getElementById("handwritingModeButton"),
       titleInput: documentRef.getElementById("titleInput"),
       contentInput: documentRef.getElementById("contentInput"),
+      handwritingPanel: documentRef.getElementById("handwritingPanel"),
+      handwritingCanvas: documentRef.getElementById("handwritingCanvas"),
+      clearHandwritingButton: documentRef.getElementById("clearHandwritingButton"),
       editorFields: documentRef.getElementById("editorFields"),
       emptyState: documentRef.getElementById("emptyState")
     };
 
     const store = createStore(storage);
     let currentTheme = applyTheme(documentRef, getInitialTheme(storage));
+    let currentInputMode = getInitialInputMode(storage);
     let saveTimer = 0;
+    let isDrawing = false;
+    let lastPoint = null;
+    const handwritingContext = elements.handwritingCanvas.getContext
+      ? elements.handwritingCanvas.getContext("2d")
+      : null;
 
     function setSaveStatus(text) {
       elements.saveStatus.textContent = text;
@@ -243,7 +266,7 @@
 
         const preview = documentRef.createElement("span");
         preview.className = "note-preview";
-        preview.textContent = getPreview(note.content);
+        preview.textContent = getPreview(note.content, note.handwriting);
 
         const date = documentRef.createElement("span");
         date.className = "note-date";
@@ -267,6 +290,7 @@
       if (!selected) {
         elements.titleInput.value = "";
         elements.contentInput.value = "";
+        clearCanvas();
         return;
       }
 
@@ -276,11 +300,13 @@
       if (documentRef.activeElement !== elements.contentInput) {
         elements.contentInput.value = selected.content;
       }
+      renderHandwriting(selected.handwriting);
     }
 
     function render() {
       renderList();
       renderEditor();
+      renderInputMode();
     }
 
     function renderThemeToggle() {
@@ -294,6 +320,136 @@
       currentTheme = applyTheme(documentRef, currentTheme === "dark" ? "light" : "dark");
       storage.setItem(THEME_KEY, currentTheme);
       renderThemeToggle();
+      renderHandwriting(store.getSelectedNote()?.handwriting || "");
+    }
+
+    function renderInputMode() {
+      const isHandwriting = currentInputMode === "handwriting";
+      elements.contentInput.hidden = isHandwriting;
+      elements.handwritingPanel.hidden = !isHandwriting;
+      elements.textModeButton.classList.toggle("active", !isHandwriting);
+      elements.handwritingModeButton.classList.toggle("active", isHandwriting);
+      elements.textModeButton.setAttribute("aria-pressed", String(!isHandwriting));
+      elements.handwritingModeButton.setAttribute("aria-pressed", String(isHandwriting));
+      if (isHandwriting) {
+        renderHandwriting(store.getSelectedNote()?.handwriting || "");
+      }
+    }
+
+    function setInputMode(mode) {
+      currentInputMode = mode === "handwriting" ? "handwriting" : DEFAULT_INPUT_MODE;
+      storage.setItem(INPUT_MODE_KEY, currentInputMode);
+      renderInputMode();
+    }
+
+    function resizeCanvas() {
+      if (!handwritingContext) {
+        return;
+      }
+      const canvas = elements.handwritingCanvas;
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+      const cssWidth = Math.max(1, Math.round(rect?.width || canvas.width || 900));
+      const cssHeight = Math.max(1, Math.round(rect?.height || canvas.height || 560));
+      const ratio = window.devicePixelRatio || 1;
+      if (canvas.width !== Math.round(cssWidth * ratio) || canvas.height !== Math.round(cssHeight * ratio)) {
+        canvas.width = Math.round(cssWidth * ratio);
+        canvas.height = Math.round(cssHeight * ratio);
+      }
+      handwritingContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+      handwritingContext.lineCap = "round";
+      handwritingContext.lineJoin = "round";
+      handwritingContext.lineWidth = 3.4;
+      handwritingContext.strokeStyle = currentTheme === "dark" ? "#101828" : "#1f2933";
+    }
+
+    function clearCanvas() {
+      if (!handwritingContext) {
+        return;
+      }
+      const canvas = elements.handwritingCanvas;
+      resizeCanvas();
+      handwritingContext.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function renderHandwriting(dataUrl) {
+      if (!handwritingContext) {
+        return;
+      }
+      clearCanvas();
+      if (!dataUrl) {
+        return;
+      }
+      const image = new Image();
+      image.onload = () => {
+        const canvas = elements.handwritingCanvas;
+        const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+        const cssWidth = Math.max(1, Math.round(rect?.width || canvas.width || 900));
+        const cssHeight = Math.max(1, Math.round(rect?.height || canvas.height || 560));
+        handwritingContext.drawImage(image, 0, 0, cssWidth, cssHeight);
+      };
+      image.src = dataUrl;
+    }
+
+    function getCanvasPoint(event) {
+      const canvas = elements.handwritingCanvas;
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
+      };
+    }
+
+    function drawPoint(point) {
+      handwritingContext.beginPath();
+      handwritingContext.arc(point.x, point.y, 1.7, 0, Math.PI * 2);
+      handwritingContext.fillStyle = handwritingContext.strokeStyle;
+      handwritingContext.fill();
+    }
+
+    function saveHandwriting() {
+      if (!handwritingContext) {
+        return;
+      }
+      const dataUrl = elements.handwritingCanvas.toDataURL("image/png");
+      store.updateSelected({ handwriting: dataUrl });
+      renderList();
+      scheduleSavedStatus();
+    }
+
+    function startDrawing(event) {
+      if (!store.getSelectedNote() || !handwritingContext) {
+        return;
+      }
+      event.preventDefault();
+      resizeCanvas();
+      isDrawing = true;
+      lastPoint = getCanvasPoint(event);
+      drawPoint(lastPoint);
+      elements.handwritingCanvas.setPointerCapture?.(event.pointerId);
+    }
+
+    function draw(event) {
+      if (!isDrawing || !lastPoint || !handwritingContext) {
+        return;
+      }
+      event.preventDefault();
+      const point = getCanvasPoint(event);
+      handwritingContext.beginPath();
+      handwritingContext.moveTo(lastPoint.x, lastPoint.y);
+      handwritingContext.lineTo(point.x, point.y);
+      handwritingContext.stroke();
+      lastPoint = point;
+    }
+
+    function stopDrawing(event) {
+      if (!isDrawing) {
+        return;
+      }
+      event.preventDefault();
+      isDrawing = false;
+      lastPoint = null;
+      elements.handwritingCanvas.releasePointerCapture?.(event.pointerId);
+      saveHandwriting();
     }
 
     function addNote() {
@@ -308,6 +464,18 @@
     elements.newNoteButton.addEventListener("click", addNote);
     elements.emptyNewNoteButton.addEventListener("click", addNote);
     elements.themeToggle.addEventListener("click", toggleTheme);
+    elements.textModeButton.addEventListener("click", () => setInputMode("text"));
+    elements.handwritingModeButton.addEventListener("click", () => setInputMode("handwriting"));
+    elements.clearHandwritingButton.addEventListener("click", () => {
+      clearCanvas();
+      store.updateSelected({ handwriting: "" });
+      renderList();
+      scheduleSavedStatus();
+    });
+    elements.handwritingCanvas.addEventListener("pointerdown", startDrawing);
+    elements.handwritingCanvas.addEventListener("pointermove", draw);
+    elements.handwritingCanvas.addEventListener("pointerup", stopDrawing);
+    elements.handwritingCanvas.addEventListener("pointercancel", stopDrawing);
 
     elements.noteList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-note-id]");
@@ -360,11 +528,13 @@
     STORAGE_KEY,
     SELECTED_KEY,
     THEME_KEY,
+    INPUT_MODE_KEY,
     createNote,
     createStore,
     getPreview,
     getDisplayTitle,
     getInitialTheme,
+    getInitialInputMode,
     applyTheme,
     initApp
   };

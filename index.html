@@ -34,7 +34,18 @@
 
         <div class="editor-fields" id="editorFields">
           <input class="title-input" id="titleInput" type="text" placeholder="标题" aria-label="标题">
+          <div class="input-mode-tabs" role="group" aria-label="输入模式">
+            <button class="text-button mode-button active" id="textModeButton" type="button" aria-pressed="true">文本</button>
+            <button class="text-button mode-button" id="handwritingModeButton" type="button" aria-pressed="false">手写</button>
+          </div>
           <textarea class="content-input" id="contentInput" placeholder="开始记录..." aria-label="内容"></textarea>
+          <section class="handwriting-panel" id="handwritingPanel" aria-label="手写内容" hidden>
+            <div class="handwriting-toolbar">
+              <span>手写板</span>
+              <button class="text-button" id="clearHandwritingButton" type="button">清空</button>
+            </div>
+            <canvas class="handwriting-canvas" id="handwritingCanvas" width="900" height="560" aria-label="手写画布"></canvas>
+          </section>
         </div>
 
         <div class="empty-state" id="emptyState" hidden>

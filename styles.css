@@ -12,6 +12,8 @@
   --hover-bg: #eef3f8;
   --danger: #c2413a;
   --danger-bg: #fff0ef;
+  --canvas-bg: #ffffff;
+  --canvas-line: rgba(102, 112, 133, 0.16);
   --shadow: 0 18px 45px rgba(31, 41, 51, 0.12);
   --toggle-shadow: 0 14px 34px rgba(31, 41, 51, 0.2);
 }
@@ -30,6 +32,8 @@
   --hover-bg: #1d2b3d;
   --danger: #ff9b94;
   --danger-bg: #3a2022;
+  --canvas-bg: #f8fafc;
+  --canvas-line: rgba(102, 112, 133, 0.28);
   --shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
   --toggle-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
 }
@@ -54,6 +58,10 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .app-shell {
@@ -273,7 +281,7 @@ button {
 
 .editor-fields {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -299,6 +307,63 @@ button {
   padding: 10px clamp(20px, 5vw, 64px) 48px;
   font-size: 17px;
   line-height: 1.7;
+}
+
+.input-mode-tabs {
+  display: inline-flex;
+  gap: 6px;
+  width: fit-content;
+  margin: 0 clamp(20px, 5vw, 64px) 12px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+}
+
+.mode-button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mode-button.active {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.handwriting-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0 clamp(20px, 5vw, 64px) 48px;
+}
+
+.handwriting-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.handwriting-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: var(--canvas-bg);
+  background-image:
+    linear-gradient(var(--canvas-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .empty-state {
@@ -346,6 +411,18 @@ button {
   .title-input {
     padding-top: 22px;
     font-size: 26px;
+  }
+
+  .input-mode-tabs {
+    margin-bottom: 10px;
+  }
+
+  .handwriting-panel {
+    padding-bottom: 58px;
+  }
+
+  .handwriting-canvas {
+    min-height: 260px;
   }
 
   .editor-toolbar {

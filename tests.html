@@ -101,6 +101,7 @@
           run() {
             assert(NotesApp.getDisplayTitle("   ") === "未命名笔记", "空标题占位错误");
             assert(NotesApp.getPreview("\n\t") === "暂无内容", "空内容占位错误");
+            assert(NotesApp.getPreview("", "data:image/png;base64,abc") === "手写笔记", "手写内容占位错误");
           }
         },
         {
@@ -124,6 +125,26 @@
           name: "应用 logo 使用指定图片",
           run() {
             assert(NotesApp.APP_LOGO_SRC === "assets/logo-bird.png", "logo 路径应该指向指定图片");
+          }
+        },
+        {
+          name: "手写内容会持久化",
+          run() {
+            const storage = createMemoryStorage();
+            const store = NotesApp.createStore(storage);
+            store.addNote();
+            store.updateSelected({ handwriting: "data:image/png;base64,abc" });
+
+            const reloaded = NotesApp.createStore(storage);
+            assert(reloaded.getSelectedNote().handwriting === "data:image/png;base64,abc", "手写内容应该保存");
+          }
+        },
+        {
+          name: "输入模式偏好会读取手写模式",
+          run() {
+            const storage = createMemoryStorage();
+            storage.setItem(NotesApp.INPUT_MODE_KEY, "handwriting");
+            assert(NotesApp.getInitialInputMode(storage) === "handwriting", "应该读取手写模式偏好");
           }
         }
       ];
