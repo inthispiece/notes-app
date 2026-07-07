@@ -4,6 +4,7 @@
   const STORAGE_KEY = "html-notes-app.notes";
   const SELECTED_KEY = "html-notes-app.selected";
   const THEME_KEY = "html-notes-app.theme";
+  const APP_NAME = "lrc神金笔记";
   const THEMES = {
     light: {
       value: "light",
@@ -353,6 +354,7 @@
   }
 
   window.NotesApp = {
+    APP_NAME,
     STORAGE_KEY,
     SELECTED_KEY,
     THEME_KEY,

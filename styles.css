@@ -82,10 +82,45 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-.sidebar-header h1 {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand h1 {
   margin: 0;
-  font-size: 22px;
+  overflow: hidden;
+  font-size: 21px;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-logo {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+}
+
+.brand-logo-body,
+.brand-logo-wing,
+.brand-logo-beak {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.brand-logo-wing {
+  stroke: var(--muted);
+  stroke-width: 2.5;
+}
+
+.brand-logo-eye {
+  fill: var(--text);
 }
 
 .icon-button {

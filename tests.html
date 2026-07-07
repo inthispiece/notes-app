@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>笔记测试</title>
+    <title>lrc神金笔记测试</title>
     <style>
       body {
         margin: 32px;
@@ -29,7 +29,7 @@
     </style>
   </head>
   <body>
-    <h1>笔记应用测试</h1>
+    <h1>lrc神金笔记测试</h1>
     <pre id="results">运行中...</pre>
 
     <script>
@@ -112,6 +112,12 @@
             NotesApp.applyTheme(document, "dark");
             assert(document.documentElement.dataset.theme === "dark", "应该应用深色模式");
             NotesApp.applyTheme(document, "light");
+          }
+        },
+        {
+          name: "应用名称为 lrc神金笔记",
+          run() {
+            assert(NotesApp.APP_NAME === "lrc神金笔记", "应用名称应该保持一致");
           }
         }
       ];
