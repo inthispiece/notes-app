@@ -13,6 +13,8 @@ import {
   Moon,
   Paintbrush,
   PenLine,
+  Pin,
+  PinOff,
   Plus,
   Redo2,
   Search,
@@ -42,6 +44,8 @@ import {
 
 type Tool = "pen" | "eraser" | "lasso";
 type PenType = "ballpoint" | "fountain" | "highlighter";
+type FolderMenuState = { folder: NoteFolder; x: number; y: number } | null;
+type DraggedNoteState = { noteId: string; overFolderId: string } | null;
 
 const PEN_COLORS = ["#1f2933", "#ef4444", "#facc15", "#2563eb", "#16a34a", "#7c3aed", "#eef4ff"];
 
@@ -77,7 +81,12 @@ export function App() {
   const [zoomOutSignal, setZoomOutSignal] = useState(0);
   const [resetZoomSignal, setResetZoomSignal] = useState(0);
   const [hasSelection, setHasSelection] = useState(false);
+  const [folderMenu, setFolderMenu] = useState<FolderMenuState>(null);
+  const [draggedNote, setDraggedNote] = useState<DraggedNoteState>(null);
+  const [pdfImportStatus, setPdfImportStatus] = useState("");
   const saveTimer = useRef<number>();
+  const longPressTimer = useRef<number>();
+  const longPressStart = useRef({ x: 0, y: 0 });
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const selectedNote = useMemo(() => notes.find((note) => note.id === selectedId) || null, [notes, selectedId]);
@@ -172,20 +181,125 @@ export function App() {
   };
 
   const importPdfFile = async (file: File) => {
-    const pages = await renderPdfFileToPages(file);
-    const note = await repository.createNote("handwriting");
-    const folderId = selectedFolderId !== "all" && selectedFolderId !== "unfiled" ? selectedFolderId : "";
-    await repository.updateNote(note.id, {
-      folderId,
-      title: file.name.replace(/\.pdf$/i, "") || "导入 PDF",
-      handwritingPages: pages
-    });
-    setDialog(null);
-    setCurrentPageIndex(0);
-    await repository.setSelectedId(note.id);
+    setPdfImportStatus("正在导入 PDF...");
+    try {
+      const pages = await renderPdfFileToPages(file);
+      const note = await repository.createNote("handwriting");
+      const folderId = selectedFolderId !== "all" && selectedFolderId !== "unfiled" ? selectedFolderId : "";
+      await repository.updateNote(note.id, {
+        folderId,
+        title: file.name.replace(/\.pdf$/i, "") || "导入 PDF",
+        handwritingPages: pages
+      });
+      setDialog(null);
+      setCurrentPageIndex(0);
+      await repository.setSelectedId(note.id);
+      await refresh();
+      scheduleSaved();
+      setPdfImportStatus(`已导入 ${pages.length} 页 PDF`);
+      window.setTimeout(() => setPdfImportStatus(""), 1800);
+    } catch (error) {
+      console.error(error);
+      setPdfImportStatus("PDF 导入失败，请换一个 PDF 或稍后重试");
+    }
+  };
+
+  const clearLongPress = () => {
+    window.clearTimeout(longPressTimer.current);
+  };
+
+  const openFolderMenu = (folder: NoteFolder, x: number, y: number) => {
+    setFolderMenu({ folder, x, y });
+  };
+
+  const renameFolder = async (folder: NoteFolder) => {
+    const name = window.prompt("文件夹名称", folder.name);
+    if (name === null) return;
+    await repository.updateFolder(folder.id, { name });
+    setFolderMenu(null);
+    await refresh();
+  };
+
+  const togglePinFolder = async (folder: NoteFolder) => {
+    await repository.updateFolder(folder.id, { pinnedAt: folder.pinnedAt ? "" : new Date().toISOString() });
+    setFolderMenu(null);
+    await refresh();
+  };
+
+  const deleteFolder = async (folder: NoteFolder) => {
+    const confirmed = window.confirm(`删除文件夹“${folder.name}”吗？其中的笔记会移到“未归档”。`);
+    if (!confirmed) return;
+    await repository.deleteFolder(folder.id);
+    if (selectedFolderId === folder.id) {
+      setSelectedFolderId("unfiled");
+    }
+    setFolderMenu(null);
     await refresh();
     scheduleSaved();
   };
+
+  const moveNoteToFolder = async (noteId: string, folderId: string) => {
+    const targetFolderId = folderId === "unfiled" ? "" : folderId;
+    const updated = await repository.updateNote(noteId, { folderId: targetFolderId });
+    if (!updated) return;
+    setNotes((current) => current.map((note) => (note.id === updated.id ? updated : note)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    scheduleSaved();
+  };
+
+  const updateDraggedNoteTarget = (clientX: number, clientY: number) => {
+    const element = document.elementFromPoint(clientX, clientY);
+    const folderElement = element?.closest<HTMLElement>("[data-folder-drop]");
+    const folderId = folderElement?.dataset.folderDrop || "";
+    setDraggedNote((current) => (current ? { ...current, overFolderId: folderId } : current));
+  };
+
+  const startFolderLongPress = (folder: NoteFolder, event: React.PointerEvent<HTMLButtonElement>) => {
+    longPressStart.current = { x: event.clientX, y: event.clientY };
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => openFolderMenu(folder, event.clientX, event.clientY), 550);
+  };
+
+  const startNoteLongPress = (noteId: string, event: React.PointerEvent<HTMLButtonElement>) => {
+    longPressStart.current = { x: event.clientX, y: event.clientY };
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => {
+      setDraggedNote({ noteId, overFolderId: "" });
+      navigator.vibrate?.(20);
+    }, 550);
+  };
+
+  const updateLongPressMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (Math.hypot(event.clientX - longPressStart.current.x, event.clientY - longPressStart.current.y) > 10) {
+      clearLongPress();
+    }
+    if (!draggedNote) return;
+    updateDraggedNoteTarget(event.clientX, event.clientY);
+  };
+
+  const finishNoteDrag = async () => {
+    clearLongPress();
+    if (!draggedNote) return;
+    const { noteId, overFolderId } = draggedNote;
+    setDraggedNote(null);
+    if (!overFolderId || overFolderId === "all") return;
+    await moveNoteToFolder(noteId, overFolderId);
+  };
+
+  useEffect(() => {
+    if (!draggedNote) return;
+    const handlePointerMove = (event: PointerEvent) => updateDraggedNoteTarget(event.clientX, event.clientY);
+    const handlePointerUp = () => {
+      void finishNoteDrag();
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggedNote]);
 
   const exportSelectedPdf = async () => {
     if (!selectedNote) return;
@@ -291,19 +405,50 @@ export function App() {
             <span className="visually-hidden">搜索笔记</span>
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="搜索标题或内容" autoComplete="off" />
           </label>
-          <nav className="folder-list" aria-label="文件夹">
-            <button className={`folder-item ${selectedFolderId === "all" ? "active" : ""}`} type="button" onClick={() => setSelectedFolderId("all")}>
+          <nav className={`folder-list ${draggedNote ? "drop-mode" : ""}`} aria-label="文件夹">
+            <button className={`folder-item ${selectedFolderId === "all" ? "active" : ""}`} type="button" data-folder-drop="all" onClick={() => setSelectedFolderId("all")}>
               <Folder size={16} />
               <span>全部笔记</span>
               <span>{notes.length}</span>
             </button>
-            <button className={`folder-item ${selectedFolderId === "unfiled" ? "active" : ""}`} type="button" onClick={() => setSelectedFolderId("unfiled")}>
+            <button
+              className={`folder-item ${selectedFolderId === "unfiled" ? "active" : ""} ${draggedNote?.overFolderId === "unfiled" ? "drop-target" : ""}`}
+              type="button"
+              data-folder-drop="unfiled"
+              onClick={() => setSelectedFolderId("unfiled")}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const noteId = event.dataTransfer.getData("text/plain");
+                if (noteId) void moveNoteToFolder(noteId, "unfiled");
+              }}
+            >
               <Folder size={16} />
               <span>未归档</span>
               <span>{folderCounts.get("unfiled") || 0}</span>
             </button>
             {folders.map((folder) => (
-              <button className={`folder-item ${selectedFolderId === folder.id ? "active" : ""}`} key={folder.id} type="button" onClick={() => setSelectedFolderId(folder.id)}>
+              <button
+                className={`folder-item ${selectedFolderId === folder.id ? "active" : ""} ${draggedNote?.overFolderId === folder.id ? "drop-target" : ""}`}
+                key={folder.id}
+                type="button"
+                data-folder-drop={folder.id}
+                onClick={() => setSelectedFolderId(folder.id)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  openFolderMenu(folder, event.clientX, event.clientY);
+                }}
+                onPointerDown={(event) => startFolderLongPress(folder, event)}
+                onPointerMove={updateLongPressMove}
+                onPointerUp={clearLongPress}
+                onPointerCancel={clearLongPress}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const noteId = event.dataTransfer.getData("text/plain");
+                  if (noteId) void moveNoteToFolder(noteId, folder.id);
+                }}
+              >
                 <Folder size={16} />
                 <span>{folder.name}</span>
                 <span>{folderCounts.get(folder.id) || 0}</span>
@@ -313,7 +458,26 @@ export function App() {
           <ul className="note-list" aria-label="笔记">
             {filteredNotes.map((note) => (
               <li key={note.id}>
-                <button className={`note-item ${note.id === selectedId ? "active" : ""}`} type="button" aria-current={note.id === selectedId} onClick={() => selectNote(note.id)}>
+                <button
+                  className={`note-item ${note.id === selectedId ? "active" : ""} ${draggedNote?.noteId === note.id ? "dragging" : ""}`}
+                  type="button"
+                  aria-current={note.id === selectedId}
+                  draggable
+                  onClick={() => {
+                    if (!draggedNote) void selectNote(note.id);
+                  }}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/plain", note.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onPointerDown={(event) => startNoteLongPress(note.id, event)}
+                  onPointerMove={updateLongPressMove}
+                  onPointerUp={finishNoteDrag}
+                  onPointerCancel={() => {
+                    clearLongPress();
+                    setDraggedNote(null);
+                  }}
+                >
                   <span className="note-title">{getDisplayTitle(note.title)}</span>
                   <span className="note-preview">{getPreview(note)}</span>
                   <span className="note-date">{formatNoteDate(note.updatedAt)}</span>
@@ -328,6 +492,8 @@ export function App() {
             <div className="status-group">
               <span>{notes.length} 条笔记</span>
               <span aria-live="polite">{saveState === "saving" ? "正在保存..." : "已保存"}</span>
+              {pdfImportStatus && <span aria-live="polite">{pdfImportStatus}</span>}
+              {draggedNote && <span aria-live="polite">松手移动到目标文件夹</span>}
             </div>
             <div className="toolbar-actions">
               <button className="icon-text-button" type="button" aria-pressed={sidebarCollapsed} onClick={toggleSidebar}>
@@ -506,6 +672,31 @@ export function App() {
           }
         }}
       />
+
+      {folderMenu && (
+        <>
+          <button className="menu-backdrop" type="button" aria-label="关闭文件夹菜单" onClick={() => setFolderMenu(null)} />
+          <div className="floating-menu" style={{ left: folderMenu.x, top: folderMenu.y }} role="menu">
+            <button type="button" role="menuitem" onClick={() => renameFolder(folderMenu.folder)}>
+              重命名
+            </button>
+            <button type="button" role="menuitem" onClick={() => togglePinFolder(folderMenu.folder)}>
+              {folderMenu.folder.pinnedAt ? (
+                <>
+                  <PinOff size={16} /> 取消置顶
+                </>
+              ) : (
+                <>
+                  <Pin size={16} /> 置顶
+                </>
+              )}
+            </button>
+            <button className="danger-menu-item" type="button" role="menuitem" onClick={() => deleteFolder(folderMenu.folder)}>
+              删除
+            </button>
+          </div>
+        </>
+      )}
 
       <button className="theme-toggle" type="button" aria-label={theme === "dark" ? "切换为浅色模式" : "切换为深色模式"} title={theme === "dark" ? "切换为浅色模式" : "切换为深色模式"} onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}>
         {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}

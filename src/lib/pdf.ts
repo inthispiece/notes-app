@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
-import * as pdfjs from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import type { Note } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;

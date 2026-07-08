@@ -26,12 +26,14 @@ export interface Note {
 export interface Folder {
   id: string;
   name: string;
+  pinnedAt: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export type NewNoteInput = Pick<Note, "type">;
 export type NotePatch = Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages">>;
+export type FolderPatch = Partial<Pick<Folder, "name" | "pinnedAt">>;
 
 export interface NotesRepository {
   listNotes(): Promise<Note[]>;
@@ -40,6 +42,8 @@ export interface NotesRepository {
   setSelectedId(id: string): Promise<void>;
   createNote(type: NoteType): Promise<Note>;
   createFolder(name: string): Promise<Folder>;
+  updateFolder(id: string, fields: FolderPatch): Promise<Folder | null>;
+  deleteFolder(id: string): Promise<Folder | null>;
   updateNote(id: string, fields: NotePatch): Promise<Note | null>;
   deleteNote(id: string): Promise<Note | null>;
   migrateFromLegacyLocalStorage(): Promise<void>;

@@ -92,6 +92,25 @@ describe("IndexedDbNotesRepository", () => {
     expect((await repository.listNotes())[0].folderId).toBe(folder.id);
   });
 
+  it("renames, pins and deletes folders without deleting notes", async () => {
+    const repository = new IndexedDbNotesRepository(createMemoryStorage(), "notes-repository-folder-actions-test");
+    const note = await repository.createNote("text");
+    const first = await repository.createFolder("普通");
+    const second = await repository.createFolder("重要");
+    await repository.updateNote(note.id, { folderId: second.id });
+
+    await repository.updateFolder(first.id, { name: "资料" });
+    await repository.updateFolder(second.id, { pinnedAt: "2026-01-02T00:00:00.000Z" });
+
+    const folders = await repository.listFolders();
+    expect(folders[0].id).toBe(second.id);
+    expect(folders[1].name).toBe("资料");
+
+    await repository.deleteFolder(second.id);
+    expect(await repository.listFolders()).toHaveLength(1);
+    expect((await repository.listNotes())[0].folderId).toBe("");
+  });
+
   it("migrates legacy localStorage notes without deleting old data", async () => {
     const storage = createMemoryStorage();
     storage.setItem(

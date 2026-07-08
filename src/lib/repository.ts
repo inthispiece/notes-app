@@ -5,6 +5,7 @@ import {
   LEGACY_STORAGE_KEY,
   type Note,
   type Folder,
+  type FolderPatch,
   type NotePatch,
   type NoteType,
   type NotesRepository
@@ -65,7 +66,12 @@ export class IndexedDbNotesRepository implements NotesRepository {
 
   async listFolders() {
     const db = await this.dbPromise;
-    return (await db.getAll(FOLDERS_STORE)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return (await db.getAll(FOLDERS_STORE)).sort((a, b) => {
+      if (a.pinnedAt && b.pinnedAt) return b.pinnedAt.localeCompare(a.pinnedAt);
+      if (a.pinnedAt) return -1;
+      if (b.pinnedAt) return 1;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
   }
 
   async getSelectedId() {
@@ -98,11 +104,47 @@ export class IndexedDbNotesRepository implements NotesRepository {
     const folder: Folder = {
       id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
       name: name.trim() || "新建文件夹",
+      pinnedAt: "",
       createdAt: timestamp,
       updatedAt: timestamp
     };
     await db.put(FOLDERS_STORE, folder);
     return folder;
+  }
+
+  async updateFolder(id: string, fields: FolderPatch) {
+    const db = await this.dbPromise;
+    const current = await db.get(FOLDERS_STORE, id);
+    if (!current) {
+      return null;
+    }
+    const updated: Folder = {
+      ...current,
+      ...fields,
+      name: fields.name !== undefined ? fields.name.trim() || current.name : current.name,
+      updatedAt: new Date().toISOString()
+    };
+    await db.put(FOLDERS_STORE, updated);
+    return updated;
+  }
+
+  async deleteFolder(id: string) {
+    const db = await this.dbPromise;
+    const current = await db.get(FOLDERS_STORE, id);
+    if (!current) {
+      return null;
+    }
+    const tx = db.transaction([FOLDERS_STORE, NOTES_STORE], "readwrite");
+    await tx.objectStore(FOLDERS_STORE).delete(id);
+    const notes = await tx.objectStore(NOTES_STORE).getAll();
+    const timestamp = new Date().toISOString();
+    for (const note of notes) {
+      if (note.folderId === id) {
+        await tx.objectStore(NOTES_STORE).put({ ...note, folderId: "", updatedAt: timestamp });
+      }
+    }
+    await tx.done;
+    return current;
   }
 
   async updateNote(id: string, fields: NotePatch) {
