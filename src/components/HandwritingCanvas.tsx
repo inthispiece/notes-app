@@ -4,6 +4,8 @@ import { isPointInPolygon, type Point } from "../lib/geometry";
 type Tool = "pen" | "eraser" | "lasso";
 type PenType = "ballpoint" | "fountain" | "highlighter";
 
+const HIGHLIGHTER_COLOR = "#fff34d";
+
 interface ViewTransform {
   scale: number;
   x: number;
@@ -35,6 +37,7 @@ interface Props {
   zoomInSignal: number;
   zoomOutSignal: number;
   resetZoomSignal: number;
+  redoSignal: number;
 }
 
 export function HandwritingCanvas({
@@ -52,7 +55,8 @@ export function HandwritingCanvas({
   undoSignal,
   zoomInSignal,
   zoomOutSignal,
-  resetZoomSignal
+  resetZoomSignal,
+  redoSignal
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,13 +72,16 @@ export function HandwritingCanvas({
   const handledZoomInSignalRef = useRef(zoomInSignal);
   const handledZoomOutSignalRef = useRef(zoomOutSignal);
   const handledResetZoomSignalRef = useRef(resetZoomSignal);
+  const handledRedoSignalRef = useRef(redoSignal);
   const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
   const activePointersRef = useRef(new Map<number, Point>());
   const pinchStartRef = useRef<{ distance: number; center: Point; view: ViewTransform } | null>(null);
   const viewRef = useRef<ViewTransform>({ scale: 1, x: 0, y: 0 });
   const drawingRef = useRef(false);
   const draggingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
+  const highlighterPointsRef = useRef<Point[]>([]);
   const lassoPointsRef = useRef<Point[]>([]);
   const selectionRef = useRef<Selection | null>(null);
   const dragOffsetRef = useRef<Point>({ x: 0, y: 0 });
@@ -139,12 +146,12 @@ export function HandwritingCanvas({
             : penType === "fountain"
               ? Math.max(1, penSize * (0.35 + pressure * 1.65))
               : penSize;
-      ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : penType === "highlighter" ? "multiply" : "source-over";
-      ctx.globalAlpha = tool !== "eraser" && penType === "highlighter" ? 0.38 : 1;
+      ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+      ctx.globalAlpha = 1;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.lineWidth = size;
-      ctx.strokeStyle = tool === "eraser" ? "rgba(0,0,0,1)" : color;
+      ctx.strokeStyle = tool === "eraser" ? "rgba(0,0,0,1)" : penType === "highlighter" ? HIGHLIGHTER_COLOR : color;
       ctx.fillStyle = ctx.strokeStyle;
     },
     [color, penSize, penType, tool]
@@ -234,6 +241,7 @@ export function HandwritingCanvas({
     const stack = undoStackRef.current;
     if (stack[stack.length - 1] === dataUrl) return;
     stack.push(dataUrl);
+    redoStackRef.current = [];
     if (stack.length > 40) {
       stack.shift();
     }
@@ -243,13 +251,14 @@ export function HandwritingCanvas({
     (data: string) => {
       selectionRef.current = null;
       lassoPointsRef.current = [];
+      highlighterPointsRef.current = [];
       drawingRef.current = false;
       draggingRef.current = false;
       lastPointRef.current = null;
       onSelectionChange(false);
       clearOverlay();
       pageDataRef.current = data;
-      renderPage(data, true);
+      renderPage(data);
       onSave(data);
     },
     [clearOverlay, onSave, onSelectionChange, renderPage]
@@ -325,6 +334,58 @@ export function HandwritingCanvas({
     ctx.stroke();
     ctx.setLineDash([]);
   }, [clearOverlay]);
+
+  const strokeHighlighterPath = useCallback(
+    (ctx: CanvasRenderingContext2D, points: Point[], alpha: number) => {
+      if (points.length === 0) return;
+      const previousOperation = ctx.globalCompositeOperation;
+      const previousAlpha = ctx.globalAlpha;
+      const previousStroke = ctx.strokeStyle;
+      const previousWidth = ctx.lineWidth;
+      const previousCap = ctx.lineCap;
+      const previousJoin = ctx.lineJoin;
+
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = HIGHLIGHTER_COLOR;
+      ctx.lineWidth = Math.max(8, penSize * 3.6);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      if (points.length === 1) {
+        ctx.lineTo(points[0].x + 0.01, points[0].y + 0.01);
+      } else {
+        points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+      }
+      ctx.stroke();
+
+      ctx.globalCompositeOperation = previousOperation;
+      ctx.globalAlpha = previousAlpha;
+      ctx.strokeStyle = previousStroke;
+      ctx.lineWidth = previousWidth;
+      ctx.lineCap = previousCap;
+      ctx.lineJoin = previousJoin;
+    },
+    [penSize]
+  );
+
+  const drawHighlighterPreview = useCallback(() => {
+    const ctx = overlayCtxRef.current;
+    if (!ctx) return;
+    clearOverlay();
+    strokeHighlighterPath(ctx, highlighterPointsRef.current, 0.62);
+  }, [clearOverlay, strokeHighlighterPath]);
+
+  const commitHighlighterStroke = useCallback(() => {
+    const ctx = ctxRef.current;
+    if (!ctx || highlighterPointsRef.current.length === 0) return;
+    strokeHighlighterPath(ctx, highlighterPointsRef.current, 0.62);
+    highlighterPointsRef.current = [];
+    clearOverlay();
+    applyDrawingStyle();
+    save();
+  }, [applyDrawingStyle, clearOverlay, save, strokeHighlighterPath]);
 
   const extractSelection = useCallback(() => {
     const ctx = ctxRef.current;
@@ -414,6 +475,7 @@ export function HandwritingCanvas({
     const { width, height } = getCanvasSize();
     selectionRef.current = null;
     lassoPointsRef.current = [];
+    highlighterPointsRef.current = [];
     drawingRef.current = false;
     draggingRef.current = false;
     lastPointRef.current = null;
@@ -435,6 +497,7 @@ export function HandwritingCanvas({
     handledClearSelectionSignalRef.current = clearSelectionSignal;
     selectionRef.current = null;
     lassoPointsRef.current = [];
+    highlighterPointsRef.current = [];
     drawingRef.current = false;
     draggingRef.current = false;
     lastPointRef.current = null;
@@ -447,11 +510,24 @@ export function HandwritingCanvas({
   useEffect(() => {
     if (undoSignal === 0 || handledUndoSignalRef.current === undoSignal) return;
     handledUndoSignalRef.current = undoSignal;
+    const canvas = canvasRef.current;
     const previous = undoStackRef.current.pop();
-    if (previous !== undefined) {
+    if (previous !== undefined && canvas) {
+      redoStackRef.current.push(canvas.toDataURL("image/png"));
       restorePage(previous);
     }
   }, [restorePage, undoSignal]);
+
+  useEffect(() => {
+    if (redoSignal === 0 || handledRedoSignalRef.current === redoSignal) return;
+    handledRedoSignalRef.current = redoSignal;
+    const canvas = canvasRef.current;
+    const next = redoStackRef.current.pop();
+    if (next !== undefined && canvas) {
+      undoStackRef.current.push(canvas.toDataURL("image/png"));
+      restorePage(next);
+    }
+  }, [redoSignal, restorePage]);
 
   useEffect(() => {
     if (zoomInSignal === 0 || handledZoomInSignalRef.current === zoomInSignal) return;
@@ -518,6 +594,14 @@ export function HandwritingCanvas({
       return;
     }
     pushUndoState();
+    if (tool === "pen" && penType === "highlighter") {
+      highlighterPointsRef.current = [point];
+      drawingRef.current = true;
+      lastPointRef.current = point;
+      drawHighlighterPreview();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     drawingRef.current = true;
     lastPointRef.current = point;
     applyDrawingStyle(event.nativeEvent);
@@ -568,6 +652,12 @@ export function HandwritingCanvas({
       drawLassoPath();
       return;
     }
+    if (tool === "pen" && penType === "highlighter" && drawingRef.current) {
+      highlighterPointsRef.current.push(point);
+      lastPointRef.current = point;
+      drawHighlighterPreview();
+      return;
+    }
     const ctx = ctxRef.current;
     const lastPoint = lastPointRef.current;
     if (!drawingRef.current || !ctx || !lastPoint) return;
@@ -598,6 +688,13 @@ export function HandwritingCanvas({
     if (tool === "lasso" && drawingRef.current) {
       drawingRef.current = false;
       extractSelection();
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    if (tool === "pen" && penType === "highlighter" && drawingRef.current) {
+      drawingRef.current = false;
+      lastPointRef.current = null;
+      commitHighlighterStroke();
       event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }

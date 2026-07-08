@@ -11,6 +11,7 @@ import {
   Paintbrush,
   PenLine,
   Plus,
+  Redo2,
   Search,
   Sun,
   Trash2,
@@ -63,6 +64,7 @@ export function App() {
   const [commitSignal, setCommitSignal] = useState(0);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [undoSignal, setUndoSignal] = useState(0);
+  const [redoSignal, setRedoSignal] = useState(0);
   const [zoomInSignal, setZoomInSignal] = useState(0);
   const [zoomOutSignal, setZoomOutSignal] = useState(0);
   const [resetZoomSignal, setResetZoomSignal] = useState(0);
@@ -204,7 +206,9 @@ export function App() {
     }
     setPenType(nextPenType);
     if (nextPenType === "highlighter") {
-      setPenColor("#facc15");
+      setPenColor("#fff34d");
+    } else if (penType === "highlighter") {
+      setPenColor(theme === "dark" ? "#eef4ff" : "#1f2933");
     }
     setTool("pen");
   };
@@ -275,6 +279,9 @@ export function App() {
                   </button>
                   <button className="icon-button" type="button" aria-label="撤销" title="撤销" onClick={() => setUndoSignal((value) => value + 1)}>
                     <Undo2 size={17} />
+                  </button>
+                  <button className="icon-button" type="button" aria-label="恢复" title="恢复" onClick={() => setRedoSignal((value) => value + 1)}>
+                    <Redo2 size={17} />
                   </button>
                   <button className="icon-button" type="button" aria-label="缩小" title="缩小" onClick={() => setZoomOutSignal((value) => value + 1)}>
                     <ZoomOut size={17} />
@@ -368,6 +375,7 @@ export function App() {
                   commitSignal={commitSignal}
                   clearSelectionSignal={clearSelectionSignal}
                   undoSignal={undoSignal}
+                  redoSignal={redoSignal}
                   zoomInSignal={zoomInSignal}
                   zoomOutSignal={zoomOutSignal}
                   resetZoomSignal={resetZoomSignal}
