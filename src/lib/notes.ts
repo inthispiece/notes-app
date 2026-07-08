@@ -22,6 +22,7 @@ export function createNote(type: NoteType = "text", title = "未命名笔记", c
   return {
     id: createId(),
     type: noteType,
+    folderId: "",
     title: title.trim() ? title : "未命名笔记",
     content: noteType === "text" ? content : "",
     handwritingPages: [""],
@@ -50,6 +51,7 @@ export function normalizeNote(value: unknown): Note {
   return {
     id: typeof source.id === "string" && source.id ? source.id : createId(),
     type,
+    folderId: typeof source.folderId === "string" ? source.folderId : "",
     title: typeof source.title === "string" ? source.title : "未命名笔记",
     content: type === "text" && typeof source.content === "string" ? source.content : "",
     handwritingPages: pages,

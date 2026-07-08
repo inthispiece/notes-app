@@ -4,6 +4,9 @@ import {
   ChevronRight,
   Eraser,
   FilePenLine,
+  FileUp,
+  Folder,
+  FolderPlus,
   Highlighter,
   Maximize2,
   Menu,
@@ -13,6 +16,7 @@ import {
   Plus,
   Redo2,
   Search,
+  Share,
   Sun,
   Trash2,
   Undo2,
@@ -22,6 +26,7 @@ import {
 } from "lucide-react";
 import { HandwritingCanvas } from "./components/HandwritingCanvas";
 import { formatNoteDate, getDisplayTitle, getPreview } from "./lib/notes";
+import { exportNoteAsPdf, renderPdfFileToPages } from "./lib/pdf";
 import { IndexedDbNotesRepository } from "./lib/repository";
 import { applyTheme, getInitialTheme } from "./lib/theme";
 import {
@@ -29,6 +34,7 @@ import {
   APP_NAME,
   LEGACY_SIDEBAR_KEY,
   type Note,
+  type Folder as NoteFolder,
   type NoteType,
   type SaveState,
   type ThemeMode
@@ -47,7 +53,9 @@ function getInitialSidebarCollapsed() {
 
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [selectedFolderId, setSelectedFolderId] = useState("all");
   const [search, setSearch] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [theme, setTheme] = useState<ThemeMode>(() => getInitialTheme());
@@ -70,13 +78,16 @@ export function App() {
   const [resetZoomSignal, setResetZoomSignal] = useState(0);
   const [hasSelection, setHasSelection] = useState(false);
   const saveTimer = useRef<number>();
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const selectedNote = useMemo(() => notes.find((note) => note.id === selectedId) || null, [notes, selectedId]);
 
   const refresh = useCallback(async () => {
     const nextNotes = await repository.listNotes();
+    const nextFolders = await repository.listFolders();
     const nextSelected = await repository.getSelectedId();
     setNotes(nextNotes);
+    setFolders(nextFolders);
     setSelectedId(nextSelected || nextNotes[0]?.id || "");
   }, []);
 
@@ -105,15 +116,30 @@ export function App() {
 
   const filteredNotes = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return notes;
-    return notes.filter((note) => {
+    const scopedNotes =
+      selectedFolderId === "all"
+        ? notes
+        : selectedFolderId === "unfiled"
+          ? notes.filter((note) => !note.folderId)
+          : notes.filter((note) => note.folderId === selectedFolderId);
+    if (!query) return scopedNotes;
+    return scopedNotes.filter((note) => {
       const typeLabel = note.type === "handwriting" ? "手写笔记" : "文本笔记";
       return note.title.toLowerCase().includes(query) || note.content.toLowerCase().includes(query) || typeLabel.includes(query);
     });
-  }, [notes, search]);
+  }, [notes, search, selectedFolderId]);
+
+  const folderCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const note of notes) {
+      const key = note.folderId || "unfiled";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }, [notes]);
 
   const updateSelected = useCallback(
-    async (fields: Partial<Pick<Note, "title" | "content" | "handwritingPages">>) => {
+    async (fields: Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages">>) => {
       if (!selectedNote) return;
       const updated = await repository.updateNote(selectedNote.id, fields);
       if (!updated) return;
@@ -125,12 +151,46 @@ export function App() {
 
   const createNewNote = async (type: NoteType) => {
     const note = await repository.createNote(type);
+    if (selectedFolderId !== "all" && selectedFolderId !== "unfiled") {
+      await repository.updateNote(note.id, { folderId: selectedFolderId });
+    }
     setSearch("");
     setDialog(null);
     setCurrentPageIndex(0);
     setSelectedId(note.id);
     await refresh();
     scheduleSaved();
+  };
+
+  const createNewFolder = async () => {
+    const name = window.prompt("文件夹名称", "新建文件夹");
+    if (name === null) return;
+    const folder = await repository.createFolder(name);
+    setDialog(null);
+    setSelectedFolderId(folder.id);
+    await refresh();
+  };
+
+  const importPdfFile = async (file: File) => {
+    const pages = await renderPdfFileToPages(file);
+    const note = await repository.createNote("handwriting");
+    const folderId = selectedFolderId !== "all" && selectedFolderId !== "unfiled" ? selectedFolderId : "";
+    await repository.updateNote(note.id, {
+      folderId,
+      title: file.name.replace(/\.pdf$/i, "") || "导入 PDF",
+      handwritingPages: pages
+    });
+    setDialog(null);
+    setCurrentPageIndex(0);
+    await repository.setSelectedId(note.id);
+    await refresh();
+    scheduleSaved();
+  };
+
+  const exportSelectedPdf = async () => {
+    if (!selectedNote) return;
+    setCommitSignal((value) => value + 1);
+    await exportNoteAsPdf(selectedNote);
   };
 
   const selectNote = async (id: string) => {
@@ -231,6 +291,25 @@ export function App() {
             <span className="visually-hidden">搜索笔记</span>
             <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="搜索标题或内容" autoComplete="off" />
           </label>
+          <nav className="folder-list" aria-label="文件夹">
+            <button className={`folder-item ${selectedFolderId === "all" ? "active" : ""}`} type="button" onClick={() => setSelectedFolderId("all")}>
+              <Folder size={16} />
+              <span>全部笔记</span>
+              <span>{notes.length}</span>
+            </button>
+            <button className={`folder-item ${selectedFolderId === "unfiled" ? "active" : ""}`} type="button" onClick={() => setSelectedFolderId("unfiled")}>
+              <Folder size={16} />
+              <span>未归档</span>
+              <span>{folderCounts.get("unfiled") || 0}</span>
+            </button>
+            {folders.map((folder) => (
+              <button className={`folder-item ${selectedFolderId === folder.id ? "active" : ""}`} key={folder.id} type="button" onClick={() => setSelectedFolderId(folder.id)}>
+                <Folder size={16} />
+                <span>{folder.name}</span>
+                <span>{folderCounts.get(folder.id) || 0}</span>
+              </button>
+            ))}
+          </nav>
           <ul className="note-list" aria-label="笔记">
             {filteredNotes.map((note) => (
               <li key={note.id}>
@@ -255,6 +334,25 @@ export function App() {
                 <Menu size={17} />
                 <span>{sidebarCollapsed ? "显示侧栏" : "隐藏侧栏"}</span>
               </button>
+              {selectedNote && (
+                <>
+                  <label className="folder-select">
+                    <Folder size={16} aria-hidden="true" />
+                    <select value={selectedNote.folderId || ""} aria-label="笔记文件夹" onChange={(event) => updateSelected({ folderId: event.target.value })}>
+                      <option value="">未归档</option>
+                      {folders.map((folder) => (
+                        <option key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="icon-text-button" type="button" onClick={exportSelectedPdf}>
+                    <Share size={17} />
+                    <span>导出 PDF</span>
+                  </button>
+                </>
+              )}
               {selectedNote?.type === "handwriting" && (
                 <>
                   <button className="icon-button" type="button" aria-label="上一页" disabled={currentPageIndex === 0} onClick={() => movePage(-1)}>
@@ -395,6 +493,20 @@ export function App() {
         </section>
       </main>
 
+      <input
+        ref={pdfInputRef}
+        className="visually-hidden"
+        type="file"
+        accept="application/pdf,.pdf"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) {
+            void importPdfFile(file);
+          }
+        }}
+      />
+
       <button className="theme-toggle" type="button" aria-label={theme === "dark" ? "切换为浅色模式" : "切换为深色模式"} title={theme === "dark" ? "切换为浅色模式" : "切换为深色模式"} onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}>
         {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         <span>{theme === "dark" ? "浅色" : "深色"}</span>
@@ -410,6 +522,14 @@ export function App() {
             <button className="icon-text-button primary note-type-button" type="button" onClick={() => createNewNote("handwriting")}>
               <FilePenLine size={18} />
               <span>手写笔记</span>
+            </button>
+            <button className="icon-text-button note-type-button" type="button" onClick={createNewFolder}>
+              <FolderPlus size={18} />
+              <span>新建文件夹</span>
+            </button>
+            <button className="icon-text-button note-type-button" type="button" onClick={() => pdfInputRef.current?.click()}>
+              <FileUp size={18} />
+              <span>导入 PDF</span>
             </button>
           </div>
         </Dialog>

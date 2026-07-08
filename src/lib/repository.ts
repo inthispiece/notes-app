@@ -4,14 +4,16 @@ import {
   LEGACY_SELECTED_KEY,
   LEGACY_STORAGE_KEY,
   type Note,
+  type Folder,
   type NotePatch,
   type NoteType,
   type NotesRepository
 } from "./types";
 
 const DB_NAME = "lrc-shenjin-notes";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const NOTES_STORE = "notes";
+const FOLDERS_STORE = "folders";
 const META_STORE = "meta";
 const SELECTED_ID = "selectedId";
 const LEGACY_MIGRATED = "legacyMigrated";
@@ -20,6 +22,11 @@ interface NotesDb extends DBSchema {
   notes: {
     key: string;
     value: Note;
+    indexes: { "by-updated": string };
+  };
+  folders: {
+    key: string;
+    value: Folder;
     indexes: { "by-updated": string };
   };
   meta: {
@@ -40,6 +47,10 @@ export class IndexedDbNotesRepository implements NotesRepository {
           const store = db.createObjectStore(NOTES_STORE, { keyPath: "id" });
           store.createIndex("by-updated", "updatedAt");
         }
+        if (!db.objectStoreNames.contains(FOLDERS_STORE)) {
+          const store = db.createObjectStore(FOLDERS_STORE, { keyPath: "id" });
+          store.createIndex("by-updated", "updatedAt");
+        }
         if (!db.objectStoreNames.contains(META_STORE)) {
           db.createObjectStore(META_STORE);
         }
@@ -50,6 +61,11 @@ export class IndexedDbNotesRepository implements NotesRepository {
   async listNotes() {
     const db = await this.dbPromise;
     return sortNotes(await db.getAll(NOTES_STORE));
+  }
+
+  async listFolders() {
+    const db = await this.dbPromise;
+    return (await db.getAll(FOLDERS_STORE)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   async getSelectedId() {
@@ -74,6 +90,19 @@ export class IndexedDbNotesRepository implements NotesRepository {
     await tx.objectStore(META_STORE).put(note.id, SELECTED_ID);
     await tx.done;
     return note;
+  }
+
+  async createFolder(name: string) {
+    const db = await this.dbPromise;
+    const timestamp = new Date().toISOString();
+    const folder: Folder = {
+      id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+      name: name.trim() || "新建文件夹",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    await db.put(FOLDERS_STORE, folder);
+    return folder;
   }
 
   async updateNote(id: string, fields: NotePatch) {

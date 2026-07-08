@@ -84,7 +84,7 @@ button:disabled {
 
 .sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   border-right: 1px solid var(--line);
   background: var(--sidebar-bg);
@@ -206,6 +206,50 @@ button:disabled {
   list-style: none;
 }
 
+.folder-list {
+  display: grid;
+  gap: 4px;
+  max-height: 168px;
+  padding: 8px;
+  overflow: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.folder-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.folder-item span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-item span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.folder-item:hover {
+  background: var(--hover-bg);
+}
+
+.folder-item.active {
+  border-color: rgba(47, 111, 237, 0.38);
+  background: var(--active-bg);
+}
+
 .note-item {
   display: grid;
   gap: 4px;
@@ -272,6 +316,26 @@ button:disabled {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.folder-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.folder-select select {
+  max-width: 150px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
 }
 
 .page-indicator {
@@ -568,8 +632,17 @@ button:disabled {
   }
 
   .sidebar {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .folder-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(132px, max-content);
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .title-input {

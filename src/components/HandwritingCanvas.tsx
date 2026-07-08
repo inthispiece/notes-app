@@ -234,10 +234,35 @@ export function HandwritingCanvas({
     onSave(dataUrl);
   }, [onSave]);
 
+  const getCompositedDataUrl = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return "";
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext("2d");
+    if (!tempCtx) return canvas.toDataURL("image/png");
+    tempCtx.drawImage(canvas, 0, 0);
+    const selected = selectionRef.current;
+    if (selected) {
+      const { width } = getCanvasSize();
+      const ratio = canvas.width / width;
+      tempCtx.drawImage(selected.image, selected.x * ratio, selected.y * ratio, selected.width * ratio, selected.height * ratio);
+    }
+    return tempCanvas.toDataURL("image/png");
+  }, [getCanvasSize]);
+
+  const saveCompositedPage = useCallback(() => {
+    const dataUrl = getCompositedDataUrl();
+    if (!dataUrl) return;
+    pageDataRef.current = dataUrl;
+    onSave(dataUrl);
+  }, [getCompositedDataUrl, onSave]);
+
   const pushUndoState = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL("image/png");
+    const dataUrl = selectionRef.current ? getCompositedDataUrl() : canvas.toDataURL("image/png");
     const stack = undoStackRef.current;
     if (stack[stack.length - 1] === dataUrl) return;
     stack.push(dataUrl);
@@ -245,7 +270,7 @@ export function HandwritingCanvas({
     if (stack.length > 40) {
       stack.shift();
     }
-  }, []);
+  }, [getCompositedDataUrl]);
 
   const restorePage = useCallback(
     (data: string) => {
@@ -495,17 +520,23 @@ export function HandwritingCanvas({
   useEffect(() => {
     if (clearSelectionSignal === 0 || handledClearSelectionSignalRef.current === clearSelectionSignal) return;
     handledClearSelectionSignalRef.current = clearSelectionSignal;
-    selectionRef.current = null;
+    const selected = selectionRef.current;
+    if (!selected) return;
+    pushUndoState();
+    const blankSelection = document.createElement("canvas");
+    blankSelection.width = selected.width;
+    blankSelection.height = selected.height;
+    selected.image = blankSelection;
     lassoPointsRef.current = [];
     highlighterPointsRef.current = [];
     drawingRef.current = false;
     draggingRef.current = false;
     lastPointRef.current = null;
-    onSelectionChange(false);
-    clearOverlay();
+    onSelectionChange(true);
+    drawSelection();
     applyDrawingStyle();
-    save();
-  }, [applyDrawingStyle, clearOverlay, clearSelectionSignal, onSelectionChange, save]);
+    saveCompositedPage();
+  }, [applyDrawingStyle, clearSelectionSignal, drawSelection, onSelectionChange, pushUndoState, saveCompositedPage]);
 
   useEffect(() => {
     if (undoSignal === 0 || handledUndoSignalRef.current === undoSignal) return;
@@ -681,7 +712,8 @@ export function HandwritingCanvas({
     }
     if (tool === "lasso" && draggingRef.current) {
       draggingRef.current = false;
-      commitSelection();
+      drawSelection();
+      saveCompositedPage();
       event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }

@@ -15,6 +15,7 @@ export type SaveState = "saved" | "saving";
 export interface Note {
   id: string;
   type: NoteType;
+  folderId: string;
   title: string;
   content: string;
   handwritingPages: string[];
@@ -22,14 +23,23 @@ export interface Note {
   updatedAt: string;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type NewNoteInput = Pick<Note, "type">;
-export type NotePatch = Partial<Pick<Note, "title" | "content" | "handwritingPages">>;
+export type NotePatch = Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages">>;
 
 export interface NotesRepository {
   listNotes(): Promise<Note[]>;
+  listFolders(): Promise<Folder[]>;
   getSelectedId(): Promise<string>;
   setSelectedId(id: string): Promise<void>;
   createNote(type: NoteType): Promise<Note>;
+  createFolder(name: string): Promise<Folder>;
   updateNote(id: string, fields: NotePatch): Promise<Note | null>;
   deleteNote(id: string): Promise<Note | null>;
   migrateFromLegacyLocalStorage(): Promise<void>;

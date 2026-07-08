@@ -80,6 +80,18 @@ describe("IndexedDbNotesRepository", () => {
     expect(await repository.listNotes()).toHaveLength(1);
   });
 
+  it("creates folders and assigns notes to them", async () => {
+    const repository = new IndexedDbNotesRepository(createMemoryStorage(), "notes-repository-folder-test");
+    const note = await repository.createNote("handwriting");
+    const folder = await repository.createFolder("PDF 资料");
+
+    const updated = await repository.updateNote(note.id, { folderId: folder.id });
+
+    expect((await repository.listFolders()).map((item) => item.name)).toEqual(["PDF 资料"]);
+    expect(updated?.folderId).toBe(folder.id);
+    expect((await repository.listNotes())[0].folderId).toBe(folder.id);
+  });
+
   it("migrates legacy localStorage notes without deleting old data", async () => {
     const storage = createMemoryStorage();
     storage.setItem(
