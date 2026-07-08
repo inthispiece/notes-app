@@ -4,6 +4,8 @@ import {
   ChevronRight,
   Eraser,
   FilePenLine,
+  Highlighter,
+  Maximize2,
   Menu,
   Moon,
   Paintbrush,
@@ -12,7 +14,10 @@ import {
   Search,
   Sun,
   Trash2,
-  X
+  Undo2,
+  X,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import { HandwritingCanvas } from "./components/HandwritingCanvas";
 import { formatNoteDate, getDisplayTitle, getPreview } from "./lib/notes";
@@ -29,9 +34,9 @@ import {
 } from "./lib/types";
 
 type Tool = "pen" | "eraser" | "lasso";
-type PenType = "ballpoint" | "fountain";
+type PenType = "ballpoint" | "fountain" | "highlighter";
 
-const PEN_COLORS = ["#1f2933", "#ef4444", "#2563eb", "#16a34a", "#7c3aed", "#eef4ff"];
+const PEN_COLORS = ["#1f2933", "#ef4444", "#facc15", "#2563eb", "#16a34a", "#7c3aed", "#eef4ff"];
 
 const repository = new IndexedDbNotesRepository();
 
@@ -57,6 +62,10 @@ export function App() {
   const [clearSignal, setClearSignal] = useState(0);
   const [commitSignal, setCommitSignal] = useState(0);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
+  const [undoSignal, setUndoSignal] = useState(0);
+  const [zoomInSignal, setZoomInSignal] = useState(0);
+  const [zoomOutSignal, setZoomOutSignal] = useState(0);
+  const [resetZoomSignal, setResetZoomSignal] = useState(0);
   const [hasSelection, setHasSelection] = useState(false);
   const saveTimer = useRef<number>();
 
@@ -194,6 +203,9 @@ export function App() {
       setCommitSignal((value) => value + 1);
     }
     setPenType(nextPenType);
+    if (nextPenType === "highlighter") {
+      setPenColor("#facc15");
+    }
     setTool("pen");
   };
 
@@ -261,6 +273,18 @@ export function App() {
                     <Plus size={17} />
                     <span>新页</span>
                   </button>
+                  <button className="icon-button" type="button" aria-label="撤销" title="撤销" onClick={() => setUndoSignal((value) => value + 1)}>
+                    <Undo2 size={17} />
+                  </button>
+                  <button className="icon-button" type="button" aria-label="缩小" title="缩小" onClick={() => setZoomOutSignal((value) => value + 1)}>
+                    <ZoomOut size={17} />
+                  </button>
+                  <button className="icon-button" type="button" aria-label="放大" title="放大" onClick={() => setZoomInSignal((value) => value + 1)}>
+                    <ZoomIn size={17} />
+                  </button>
+                  <button className="icon-button" type="button" aria-label="重置缩放" title="重置缩放" onClick={() => setResetZoomSignal((value) => value + 1)}>
+                    <Maximize2 size={17} />
+                  </button>
                   <div className="color-picker">
                     <button className="color-menu-button" type="button" aria-label="笔颜色" aria-expanded={colorOpen} onClick={() => setColorOpen((open) => !open)}>
                       <span className="color-swatch" style={{ "--color": penColor } as React.CSSProperties} aria-hidden="true" />
@@ -295,6 +319,10 @@ export function App() {
                   <button className={`icon-text-button ${penType === "fountain" && tool === "pen" ? "active" : ""}`} type="button" aria-pressed={penType === "fountain" && tool === "pen"} onClick={() => setDrawingPenType("fountain")}>
                     <Paintbrush size={17} />
                     <span>钢笔</span>
+                  </button>
+                  <button className={`icon-text-button ${penType === "highlighter" && tool === "pen" ? "active" : ""}`} type="button" aria-pressed={penType === "highlighter" && tool === "pen"} onClick={() => setDrawingPenType("highlighter")}>
+                    <Highlighter size={17} />
+                    <span>荧光笔</span>
                   </button>
                   <button className={`icon-text-button ${tool === "eraser" ? "active" : ""}`} type="button" aria-pressed={tool === "eraser"} onClick={() => setDrawingTool("eraser")}>
                     <Eraser size={17} />
@@ -339,6 +367,10 @@ export function App() {
                   clearSignal={clearSignal}
                   commitSignal={commitSignal}
                   clearSelectionSignal={clearSelectionSignal}
+                  undoSignal={undoSignal}
+                  zoomInSignal={zoomInSignal}
+                  zoomOutSignal={zoomOutSignal}
+                  resetZoomSignal={resetZoomSignal}
                 />
               )}
             </div>
