@@ -45,6 +45,7 @@ export function HandwritingCanvas({
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const overlayCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const pageDataRef = useRef(pageData);
+  const hasInitializedRef = useRef(false);
   const drawingRef = useRef(false);
   const draggingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
@@ -117,14 +118,19 @@ export function HandwritingCanvas({
   }, [applyDrawingStyle, getCanvasSize]);
 
   const renderPage = useCallback(
-    (data: string) => {
+    (data: string, clearBeforeLoad = false) => {
       const canvas = canvasRef.current;
       const ctx = ctxRef.current;
       if (!canvas || !ctx) return;
       resizeCanvas();
       const { width, height } = getCanvasSize();
-      ctx.clearRect(0, 0, width, height);
-      if (!data) return;
+      if (!data) {
+        ctx.clearRect(0, 0, width, height);
+        return;
+      }
+      if (clearBeforeLoad) {
+        ctx.clearRect(0, 0, width, height);
+      }
       const image = new Image();
       image.onload = () => {
         ctx.clearRect(0, 0, width, height);
@@ -139,7 +145,9 @@ export function HandwritingCanvas({
   const save = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    onSave(canvas.toDataURL("image/png"));
+    const dataUrl = canvas.toDataURL("image/png");
+    pageDataRef.current = dataUrl;
+    onSave(dataUrl);
   }, [onSave]);
 
   const tracePath = useCallback((ctx: CanvasRenderingContext2D, points: Point[], offsetX = 0, offsetY = 0) => {
@@ -252,17 +260,19 @@ export function HandwritingCanvas({
     };
     lassoPointsRef.current = [];
     onSelectionChange(true);
-    save();
     drawSelection();
   }, [clearOverlay, drawSelection, getCanvasSize, onSelectionChange, save, tracePath]);
 
   useEffect(() => {
+    if (hasInitializedRef.current) return;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
     if (!canvas || !overlay) return;
     ctxRef.current = canvas.getContext("2d");
     overlayCtxRef.current = overlay.getContext("2d");
-    renderPage(pageData);
+    hasInitializedRef.current = true;
+    pageDataRef.current = pageData;
+    renderPage(pageData, true);
   }, [pageData, renderPage]);
 
   useEffect(() => {
@@ -308,7 +318,8 @@ export function HandwritingCanvas({
     selectionRef.current = null;
     onSelectionChange(false);
     clearOverlay();
-  }, [clearOverlay, clearSelectionSignal, onSelectionChange]);
+    save();
+  }, [clearOverlay, clearSelectionSignal, onSelectionChange, save]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
