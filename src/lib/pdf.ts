@@ -5,6 +5,8 @@ import type { Note } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+const pdfJsAssetBase = `${import.meta.env.BASE_URL}pdfjs/`;
+
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -21,7 +23,16 @@ function getSafeFileName(title: string, fallback = "note") {
 
 export async function renderPdfFileToPages(file: File) {
   const data = await file.arrayBuffer();
-  const pdfDocument = await pdfjs.getDocument({ data }).promise;
+  const pdfDocument = await pdfjs.getDocument({
+    data,
+    cMapPacked: true,
+    cMapUrl: `${pdfJsAssetBase}cmaps/`,
+    standardFontDataUrl: `${pdfJsAssetBase}standard_fonts/`,
+    wasmUrl: `${pdfJsAssetBase}wasm/`,
+    iccUrl: `${pdfJsAssetBase}iccs/`,
+    useSystemFonts: true,
+    verbosity: 0
+  }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
@@ -36,6 +47,8 @@ export async function renderPdfFileToPages(file: File) {
     }
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvas, canvasContext: context, viewport }).promise;
     pages.push(canvas.toDataURL("image/png"));
   }

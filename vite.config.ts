@@ -1,11 +1,44 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const pdfJsRoot = fileURLToPath(new URL("./node_modules/pdfjs-dist/", import.meta.url));
+
+function emitPdfJsSupportAssets(): Plugin {
+  const directories = ["cmaps", "standard_fonts", "wasm", "image_decoders", "iccs"];
+  return {
+    name: "emit-pdfjs-support-assets",
+    generateBundle() {
+      const emitDirectory = (directory: string, relative = "") => {
+        const absolute = join(pdfJsRoot, directory, relative);
+        for (const entry of readdirSync(absolute)) {
+          const entryRelative = relative ? `${relative}/${entry}` : entry;
+          const entryAbsolute = join(absolute, entry);
+          if (statSync(entryAbsolute).isDirectory()) {
+            emitDirectory(directory, entryRelative);
+            continue;
+          }
+          this.emitFile({
+            type: "asset",
+            fileName: `pdfjs/${directory}/${entryRelative}`,
+            source: readFileSync(entryAbsolute)
+          });
+        }
+      };
+
+      directories.forEach((directory) => emitDirectory(directory));
+    }
+  };
+}
 
 export default defineConfig({
   base: "/notes-app/",
   plugins: [
     react(),
+    emitPdfJsSupportAssets(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["icons/*.png", "assets/logo-bird.png"],
@@ -42,8 +75,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest}"],
+        globPatterns: ["**/*.{js,mjs,css,html,ico,png,svg,webmanifest,bcmap,pfb,ttf,wasm,icc}"],
         navigateFallback: "/notes-app/index.html",
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         runtimeCaching: []
       },
