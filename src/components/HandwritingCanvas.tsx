@@ -46,6 +46,9 @@ export function HandwritingCanvas({
   const overlayCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const pageDataRef = useRef(pageData);
   const hasInitializedRef = useRef(false);
+  const handledClearSignalRef = useRef(clearSignal);
+  const handledCommitSignalRef = useRef(commitSignal);
+  const handledClearSelectionSignalRef = useRef(clearSelectionSignal);
   const drawingRef = useRef(false);
   const draggingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
@@ -297,29 +300,42 @@ export function HandwritingCanvas({
   }, [renderPage]);
 
   useEffect(() => {
-    if (clearSignal === 0) return;
+    if (clearSignal === 0 || handledClearSignalRef.current === clearSignal) return;
+    handledClearSignalRef.current = clearSignal;
     const ctx = ctxRef.current;
     if (!ctx) return;
     const { width, height } = getCanvasSize();
     selectionRef.current = null;
     lassoPointsRef.current = [];
+    drawingRef.current = false;
+    draggingRef.current = false;
+    lastPointRef.current = null;
     onSelectionChange(false);
     clearOverlay();
     ctx.clearRect(0, 0, width, height);
+    pageDataRef.current = "";
     onSave("");
   }, [clearOverlay, clearSignal, getCanvasSize, onSave, onSelectionChange]);
 
   useEffect(() => {
-    if (commitSignal > 0) commitSelection();
+    if (commitSignal === 0 || handledCommitSignalRef.current === commitSignal) return;
+    handledCommitSignalRef.current = commitSignal;
+    commitSelection();
   }, [commitSelection, commitSignal]);
 
   useEffect(() => {
-    if (clearSelectionSignal === 0) return;
+    if (clearSelectionSignal === 0 || handledClearSelectionSignalRef.current === clearSelectionSignal) return;
+    handledClearSelectionSignalRef.current = clearSelectionSignal;
     selectionRef.current = null;
+    lassoPointsRef.current = [];
+    drawingRef.current = false;
+    draggingRef.current = false;
+    lastPointRef.current = null;
     onSelectionChange(false);
     clearOverlay();
+    applyDrawingStyle();
     save();
-  }, [clearOverlay, clearSelectionSignal, onSelectionChange, save]);
+  }, [applyDrawingStyle, clearOverlay, clearSelectionSignal, onSelectionChange, save]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
@@ -390,7 +406,6 @@ export function HandwritingCanvas({
     if (tool === "lasso" && draggingRef.current) {
       draggingRef.current = false;
       commitSelection();
-      onToolChange("pen");
       event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
