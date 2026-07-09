@@ -19,6 +19,7 @@ export interface Note {
   title: string;
   content: string;
   handwritingPages: string[];
+  pdfBackgroundPages: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -32,7 +33,7 @@ export interface Folder {
 }
 
 export type NewNoteInput = Pick<Note, "type">;
-export type NotePatch = Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages">>;
+export type NotePatch = Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages" | "pdfBackgroundPages">>;
 export type FolderPatch = Partial<Pick<Folder, "name" | "pinnedAt">>;
 
 export interface NotesRepository {

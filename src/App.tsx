@@ -148,7 +148,7 @@ export function App() {
   }, [notes]);
 
   const updateSelected = useCallback(
-    async (fields: Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages">>) => {
+    async (fields: Partial<Pick<Note, "folderId" | "title" | "content" | "handwritingPages" | "pdfBackgroundPages">>) => {
       if (!selectedNote) return;
       const updated = await repository.updateNote(selectedNote.id, fields);
       if (!updated) return;
@@ -189,7 +189,8 @@ export function App() {
       await repository.updateNote(note.id, {
         folderId,
         title: file.name.replace(/\.pdf$/i, "") || "导入 PDF",
-        handwritingPages: pages
+        handwritingPages: pages.map(() => ""),
+        pdfBackgroundPages: pages
       });
       setDialog(null);
       setCurrentPageIndex(0);
@@ -332,15 +333,27 @@ export function App() {
     });
   };
 
-  const pages = selectedNote?.type === "handwriting" ? (selectedNote.handwritingPages.length ? selectedNote.handwritingPages : [""]) : [""];
+  const pages =
+    selectedNote?.type === "handwriting"
+      ? selectedNote.handwritingPages.length
+        ? selectedNote.handwritingPages
+        : selectedNote.pdfBackgroundPages.length
+          ? selectedNote.pdfBackgroundPages.map(() => "")
+          : [""]
+      : [""];
   const pageData = pages[Math.min(currentPageIndex, pages.length - 1)] || "";
+  const backgroundData = selectedNote?.type === "handwriting" ? selectedNote.pdfBackgroundPages[Math.min(currentPageIndex, pages.length - 1)] || "" : "";
 
   const saveHandwritingPage = useCallback(
     (dataUrl: string) => {
-      if (!selectedNote || selectedNote.type !== "handwriting") return;
-      const nextPages = selectedNote.handwritingPages.length ? selectedNote.handwritingPages.slice() : [""];
-      nextPages[currentPageIndex] = dataUrl;
-      void updateSelected({ handwritingPages: nextPages });
+    if (!selectedNote || selectedNote.type !== "handwriting") return;
+    const nextPages = selectedNote.handwritingPages.length
+      ? selectedNote.handwritingPages.slice()
+      : selectedNote.pdfBackgroundPages.length
+        ? selectedNote.pdfBackgroundPages.map(() => "")
+        : [""];
+    nextPages[currentPageIndex] = dataUrl;
+    void updateSelected({ handwritingPages: nextPages });
     },
     [currentPageIndex, selectedNote, updateSelected]
   );
@@ -355,7 +368,11 @@ export function App() {
     setCommitSignal((value) => value + 1);
     const nextPages = selectedNote.handwritingPages.length ? selectedNote.handwritingPages.slice() : [""];
     nextPages.push("");
-    await updateSelected({ handwritingPages: nextPages });
+    const nextBackgroundPages = selectedNote.pdfBackgroundPages.slice();
+    if (nextBackgroundPages.length) {
+      nextBackgroundPages.push("");
+    }
+    await updateSelected({ handwritingPages: nextPages, pdfBackgroundPages: nextBackgroundPages });
     setCurrentPageIndex(nextPages.length - 1);
   };
 
@@ -628,6 +645,7 @@ export function App() {
               ) : (
                 <HandwritingCanvas
                   pageData={pageData}
+                  backgroundData={backgroundData}
                   color={penColor}
                   penSize={penSize}
                   tool={tool}

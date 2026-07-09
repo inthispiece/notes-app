@@ -36,8 +36,10 @@ describe("note model", () => {
     expect(text.type).toBe("text");
     expect(text.content).toBe("");
     expect(text.handwritingPages).toEqual([""]);
+    expect(text.pdfBackgroundPages).toEqual([]);
     expect(handwriting.type).toBe("handwriting");
     expect(handwriting.content).toBe("");
+    expect(handwriting.pdfBackgroundPages).toEqual([]);
   });
 
   it("uses friendly empty title and preview labels", () => {
@@ -58,6 +60,7 @@ describe("note model", () => {
 
     expect(note.type).toBe("handwriting");
     expect(note.handwritingPages).toEqual(["data:image/png;base64,abc"]);
+    expect(note.pdfBackgroundPages).toEqual([]);
   });
 });
 

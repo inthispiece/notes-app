@@ -23,6 +23,7 @@ interface Selection {
 
 interface Props {
   pageData: string;
+  backgroundData: string;
   color: string;
   penSize: number;
   tool: Tool;
@@ -42,6 +43,7 @@ interface Props {
 
 export function HandwritingCanvas({
   pageData,
+  backgroundData,
   color,
   penSize,
   tool,
@@ -59,11 +61,14 @@ export function HandwritingCanvas({
   redoSignal
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const backgroundCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const overlayCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const pageDataRef = useRef(pageData);
+  const backgroundDataRef = useRef(backgroundData);
   const hasInitializedRef = useRef(false);
   const handledClearSignalRef = useRef(clearSignal);
   const handledCommitSignalRef = useRef(commitSignal);
@@ -166,13 +171,22 @@ export function HandwritingCanvas({
   }, [getCanvasSize]);
 
   const resizeCanvas = useCallback(() => {
+    const backgroundCanvas = backgroundCanvasRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
+    const backgroundCtx = backgroundCtxRef.current;
     const ctx = ctxRef.current;
     const overlayCtx = overlayCtxRef.current;
     if (!canvas || !ctx) return;
     const { width, height } = getCanvasSize();
     const ratio = window.devicePixelRatio || 1;
+    if (backgroundCanvas && backgroundCtx) {
+      if (backgroundCanvas.width !== Math.round(width * ratio) || backgroundCanvas.height !== Math.round(height * ratio)) {
+        backgroundCanvas.width = Math.round(width * ratio);
+        backgroundCanvas.height = Math.round(height * ratio);
+      }
+      backgroundCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
     if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
       const previous = canvas.toDataURL("image/png");
       canvas.width = Math.round(width * ratio);
@@ -198,6 +212,25 @@ export function HandwritingCanvas({
     }
     applyDrawingStyle();
   }, [applyDrawingStyle, getCanvasSize]);
+
+  const renderBackground = useCallback(
+    (data: string) => {
+      const canvas = backgroundCanvasRef.current;
+      const ctx = backgroundCtxRef.current;
+      if (!canvas || !ctx) return;
+      resizeCanvas();
+      const { width, height } = getCanvasSize();
+      ctx.clearRect(0, 0, width, height);
+      if (!data) return;
+      const image = new Image();
+      image.onload = () => {
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+      };
+      image.src = data;
+    },
+    [getCanvasSize, resizeCanvas]
+  );
 
   const renderPage = useCallback(
     (data: string, clearBeforeLoad = false) => {
@@ -462,13 +495,17 @@ export function HandwritingCanvas({
     if (hasInitializedRef.current) return;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
-    if (!canvas || !overlay) return;
+    const backgroundCanvas = backgroundCanvasRef.current;
+    if (!canvas || !overlay || !backgroundCanvas) return;
+    backgroundCtxRef.current = backgroundCanvas.getContext("2d");
     ctxRef.current = canvas.getContext("2d");
     overlayCtxRef.current = overlay.getContext("2d");
     hasInitializedRef.current = true;
     pageDataRef.current = pageData;
+    backgroundDataRef.current = backgroundData;
     renderPage(pageData, true);
-  }, [pageData, renderPage]);
+    renderBackground(backgroundData);
+  }, [backgroundData, pageData, renderBackground, renderPage]);
 
   useEffect(() => {
     if (pageDataRef.current !== pageData) {
@@ -481,15 +518,25 @@ export function HandwritingCanvas({
   }, [clearOverlay, onSelectionChange, pageData, renderPage]);
 
   useEffect(() => {
+    if (backgroundDataRef.current !== backgroundData) {
+      backgroundDataRef.current = backgroundData;
+      renderBackground(backgroundData);
+    }
+  }, [backgroundData, renderBackground]);
+
+  useEffect(() => {
     applyDrawingStyle();
     setCursorClass(tool === "lasso" ? "lasso-active" : tool === "eraser" ? "eraser-active" : "");
   }, [applyDrawingStyle, tool]);
 
   useEffect(() => {
-    const onResize = () => renderPage(pageDataRef.current);
+    const onResize = () => {
+      renderPage(pageDataRef.current);
+      renderBackground(backgroundDataRef.current);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [renderPage]);
+  }, [renderBackground, renderPage]);
 
   useEffect(() => {
     if (clearSignal === 0 || handledClearSignalRef.current === clearSignal) return;
@@ -741,6 +788,7 @@ export function HandwritingCanvas({
     <div className="handwriting-panel" aria-label="手写内容">
       <div ref={viewportRef} className="handwriting-viewport">
         <div className="handwriting-stage" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
+          <canvas ref={backgroundCanvasRef} className="pdf-background-canvas" aria-hidden="true" />
           <canvas
             ref={canvasRef}
             className={`handwriting-canvas ${cursorClass} ${selectionRef.current ? "selection-active" : ""}`}

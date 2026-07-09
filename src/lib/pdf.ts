@@ -21,6 +21,23 @@ function getSafeFileName(title: string, fallback = "note") {
   return safe || fallback;
 }
 
+async function composeHandwritingPage(backgroundData: string, handwritingData: string) {
+  if (!backgroundData) return handwritingData;
+  if (!handwritingData) return backgroundData;
+
+  const [background, handwriting] = await Promise.all([loadImage(backgroundData), loadImage(handwritingData)]);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(background.width, handwriting.width);
+  canvas.height = Math.max(background.height, handwriting.height);
+  const context = canvas.getContext("2d");
+  if (!context) return handwritingData || backgroundData;
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(background, 0, 0, canvas.width, canvas.height);
+  context.drawImage(handwriting, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
+}
+
 export async function renderPdfFileToPages(file: File) {
   const data = await file.arrayBuffer();
   const pdfDocument = await pdfjs.getDocument({
@@ -60,21 +77,22 @@ export async function exportNoteAsPdf(note: Note) {
   const filename = `${getSafeFileName(note.title)}.pdf`;
 
   if (note.type === "handwriting") {
-    const pages = note.handwritingPages.length ? note.handwritingPages : [""];
+    const pageCount = Math.max(note.handwritingPages.length, note.pdfBackgroundPages.length, 1);
     const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
 
-    for (let index = 0; index < pages.length; index += 1) {
+    for (let index = 0; index < pageCount; index += 1) {
       if (index > 0) {
         pdf.addPage("a4", "portrait");
       }
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      if (pages[index]) {
-        const image = await loadImage(pages[index]);
+      const pageData = await composeHandwritingPage(note.pdfBackgroundPages[index] || "", note.handwritingPages[index] || "");
+      if (pageData) {
+        const image = await loadImage(pageData);
         const ratio = Math.min(pageWidth / image.width, pageHeight / image.height);
         const width = image.width * ratio;
         const height = image.height * ratio;
-        pdf.addImage(pages[index], "PNG", (pageWidth - width) / 2, (pageHeight - height) / 2, width, height);
+        pdf.addImage(pageData, "PNG", (pageWidth - width) / 2, (pageHeight - height) / 2, width, height);
       }
     }
 

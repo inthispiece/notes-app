@@ -544,6 +544,7 @@ button:disabled {
   will-change: transform;
 }
 
+.pdf-background-canvas,
 .handwriting-canvas,
 .selection-overlay {
   grid-area: 1 / 1;

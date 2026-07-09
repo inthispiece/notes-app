@@ -26,6 +26,7 @@ export function createNote(type: NoteType = "text", title = "未命名笔记", c
     title: title.trim() ? title : "未命名笔记",
     content: noteType === "text" ? content : "",
     handwritingPages: [""],
+    pdfBackgroundPages: [],
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -37,6 +38,9 @@ export function normalizeNote(value: unknown): Note {
   };
   const pages = Array.isArray(source.handwritingPages)
     ? source.handwritingPages.filter((page): page is string => typeof page === "string")
+    : [];
+  const pdfBackgroundPages = Array.isArray(source.pdfBackgroundPages)
+    ? source.pdfBackgroundPages.filter((page): page is string => typeof page === "string")
     : [];
   if (pages.length === 0 && typeof source.handwriting === "string" && source.handwriting) {
     pages.push(source.handwriting);
@@ -55,6 +59,7 @@ export function normalizeNote(value: unknown): Note {
     title: typeof source.title === "string" ? source.title : "未命名笔记",
     content: type === "text" && typeof source.content === "string" ? source.content : "",
     handwritingPages: pages,
+    pdfBackgroundPages,
     createdAt: typeof source.createdAt === "string" ? source.createdAt : nowIso(),
     updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : nowIso()
   };
