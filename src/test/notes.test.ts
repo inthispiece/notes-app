@@ -139,4 +139,14 @@ describe("IndexedDbNotesRepository", () => {
     expect(await repository.getSelectedId()).toBe("legacy");
     expect(storage.getItem(LEGACY_STORAGE_KEY)).not.toBeNull();
   });
+
+  it("normalizes older IndexedDB notes that do not have PDF background pages", async () => {
+    const repository = new IndexedDbNotesRepository(createMemoryStorage(), "notes-repository-old-indexeddb-shape-test");
+    const note = await repository.createNote("handwriting");
+    await repository.updateNote(note.id, { title: "旧手写笔记" });
+
+    const notes = await repository.listNotes();
+
+    expect(notes[0].pdfBackgroundPages).toEqual([]);
+  });
 });

@@ -61,7 +61,7 @@ export class IndexedDbNotesRepository implements NotesRepository {
 
   async listNotes() {
     const db = await this.dbPromise;
-    return sortNotes(await db.getAll(NOTES_STORE));
+    return sortNotes((await db.getAll(NOTES_STORE)).map(normalizeNote));
   }
 
   async listFolders() {
@@ -153,8 +153,9 @@ export class IndexedDbNotesRepository implements NotesRepository {
     if (!current) {
       return null;
     }
+    const normalized = normalizeNote(current);
     const updated: Note = {
-      ...current,
+      ...normalized,
       ...fields,
       updatedAt: new Date().toISOString()
     };
